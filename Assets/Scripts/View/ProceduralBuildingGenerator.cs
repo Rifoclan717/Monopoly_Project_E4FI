@@ -5,64 +5,121 @@ using UnityEngine;
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer), typeof(MeshCollider))]
 public class ProceduralBuildingGenerator : MonoBehaviour
 {
-    [Header("Paramètres Monopoly")]
-    [Tooltip("0 = Terrain nu, 1 à 4 = Maisons (toit en pente), 5 = Hôtel (Gratte-ciel à retraits)")]
-    [Range(0, 5)] public int buildingLevel = 1;
+    // Groupes de couleurs officiels de Campus Tycoon (Niveaux 1, 2 et 3)
+    public enum CampusGroup
+    {
+        Marron,     // Cafétéria, Salle de TP
+        BleuCiel,   // Bibliothèque, Salle de projet
+        Rose,       // FabLab, Salle de robotique
+        Orange,     // Amphi A, Amphi B
+        Rouge,      // Bureau du BDE, Direction
+        Or          // Niveau 3 : Incubateur de start-ups, Laboratoire de recherche
+    }
+
+    [Header("État Campus Tycoon (Règles du jeu)")]
+    [Tooltip("0 = Terrain nu, 1 = Niv.1 (5R), 2 = Niv.2 (12R), 3 = Niv.3 (22R)")]
+    [Range(0, 3)] public int buildingLevel = 1;
+
+    [Tooltip("-1 = Aucun propriétaire, 0 = Joueur Humain, 1 = Rival IA 1, 2 = Rival IA 2")]
+    [Range(-1, 2)] public int ownerId = -1;
+
+    [Tooltip("Groupe de couleur du terrain sur le campus")]
+    public CampusGroup campusGroup = CampusGroup.Orange;
 
     [Header("Dimensions Géométriques")]
-    [Min(0.5f)] public float baseWidth = 2.0f;
-    [Min(0.5f)] public float baseDepth = 2.0f;
-    [Min(0.05f)] public float foundationHeight = 0.15f;
-    [Min(0.3f)] public float floorHeight = 0.8f;
-    [Min(0.2f)] public float roofHeight = 0.6f;
+    [Min(0.6f)] public float baseWidth = 1.8f;
+    [Min(0.6f)] public float baseDepth = 1.6f;
+    [Min(0.05f)] public float foundationHeight = 0.14f;
+    [Min(0.3f)] public float floorHeight = 0.55f;
+    [Min(0.2f)] public float roofHeight = 0.45f;
+
+    [Header("Palette de Couleurs (Modifiable)")]
+    public Color wallColor = new Color(0.95f, 0.93f, 0.88f); // Pierre claire universitaire
+    public Color unownedRoofColor = new Color(0.32f, 0.35f, 0.40f); // Ardoise neutre
+    public Color[] playerOwnerColors = new Color[]
+    {
+        new Color(0.18f, 0.52f, 0.95f), // ID 0 : Étudiant Joueur (Bleu vif)
+        new Color(0.90f, 0.22f, 0.25f), // ID 1 : Rival IA 1 (Rouge)
+        new Color(0.20f, 0.78f, 0.42f)  // ID 2 : Rival IA 2 (Vert)
+    };
 
     [Header("Options Techniques")]
-    [Tooltip("Met à jour le MeshCollider pour les collisions caméra / souris")]
     public bool updateCollider = true;
 
-    // Buffers de construction géométrique
     private Mesh generatedMesh;
     private readonly List<Vector3> vertices = new List<Vector3>();
-    private readonly List<int> triangles = new List<int>();
     private readonly List<Vector2> uvs = new List<Vector2>();
 
+    // 3 sous-maillages pour colorer indépendamment Socle, Murs et Toit
+    private readonly List<int> trisSocleGroup = new List<int>(); // Submesh 0
+    private readonly List<int> trisWalls = new List<int>();      // Submesh 1
+    private readonly List<int> trisRoofOwner = new List<int>();  // Submesh 2
+
     private MeshFilter meshFilter;
+    private MeshRenderer meshRenderer;
     private MeshCollider meshCollider;
+    private MaterialPropertyBlock propBlock;
+    private Color customGroupColorOverride = Color.clear;
+
+    // Identifiants Shaders (URP et Built-in Standard)
+    private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+    private static readonly int ColorId = Shader.PropertyToID("_Color");
 
     void Awake()
     {
         RebuildMesh();
     }
 
-    // Appelé automatiquement dans l'éditeur dès qu'on modifie une valeur dans l'Inspector
     void OnValidate()
     {
+        customGroupColorOverride = Color.clear;
         RebuildMesh();
     }
 
     /// <summary>
-    /// Méthode publique que le moteur logique ou l'UI pourra appeler en cours de partie.
+    /// Appelé par le moteur logique ou les événements Observer (OnPropertyUpgraded).
     /// </summary>
     public void SetBuildingLevel(int level)
     {
-        buildingLevel = Mathf.Clamp(level, 0, 5);
+        buildingLevel = Mathf.Clamp(level, 0, 3);
         RebuildMesh();
     }
 
     /// <summary>
-    /// Reconstruit intégralement le maillage 3D (Sommets, Triangles, UVs, Normales).
+    /// Appelé lors de l'achat (OnPropertyBought) ou de l'initialisation de la case.
+    /// Colorie le toit selon le propriétaire (-1 à 2) et le socle selon la couleur du groupe.
+    /// </summary>
+    public void SetOwnerVisual(int newOwnerId, Color groupColor)
+    {
+        ownerId = Mathf.Clamp(newOwnerId, -1, 2);
+        customGroupColorOverride = groupColor;
+        ApplyVisualColors();
+    }
+
+    /// <summary>
+    /// Surcharge pratique utilisant directement l'énumération des groupes de Campus Tycoon.
+    /// </summary>
+    public void SetCampusBuildingState(int level, int newOwnerId, CampusGroup group)
+    {
+        buildingLevel = Mathf.Clamp(level, 0, 3);
+        ownerId = Mathf.Clamp(newOwnerId, -1, 2);
+        campusGroup = group;
+        customGroupColorOverride = Color.clear;
+        RebuildMesh();
+    }
+
+    /// <summary>
+    /// Reconstruit le maillage procédural complet selon le niveau (0 à 3).
     /// </summary>
     public void RebuildMesh()
     {
         if (meshFilter == null) meshFilter = GetComponent<MeshFilter>();
+        if (meshRenderer == null) meshRenderer = GetComponent<MeshRenderer>();
         if (meshCollider == null) meshCollider = GetComponent<MeshCollider>();
 
         if (generatedMesh == null)
         {
-            generatedMesh = new Mesh
-            {
-                name = "ProceduralBuilding_Mesh"
-            };
+            generatedMesh = new Mesh { name = "CampusBuilding_Mesh" };
         }
         else
         {
@@ -70,69 +127,116 @@ public class ProceduralBuildingGenerator : MonoBehaviour
         }
 
         vertices.Clear();
-        triangles.Clear();
         uvs.Clear();
+        trisSocleGroup.Clear();
+        trisWalls.Clear();
+        trisRoofOwner.Clear();
 
-        // 1. Génération systématique de la dalle de fondation (présente dès le niveau 0)
-        AddBoxSection(
-            width: baseWidth,
-            depth: baseDepth,
-            yBottom: 0f,
-            yTop: foundationHeight,
-            includeTopCap: buildingLevel == 0
-        );
+        // 1. Dalle de fondation aux couleurs du Groupe (Toujours visible, même au Niveau 0)
+        AddBox(Vector3.zero, baseWidth, baseDepth, 0f, foundationHeight, trisSocleGroup);
 
-        // 2. Génération des étages selon le niveau d'investissement Monopoly
-        if (buildingLevel >= 1 && buildingLevel <= 4)
+        if (buildingLevel == 0)
         {
-            // Niveaux 1 à 4 : Maison évolutive avec toit à deux pans
-            float bodyWidth = baseWidth * 0.85f;
-            float bodyDepth = baseDepth * 0.85f;
-            float yBottom = foundationHeight;
-            float yTop = yBottom + (buildingLevel * floorHeight);
-
-            // Corps du bâtiment (sans face supérieure car recouverte par le toit)
-            AddBoxSection(bodyWidth, bodyDepth, yBottom, yTop, includeTopCap: false);
-
-            // Toit prismatique à deux pans
-            AddPitchedRoof(bodyWidth * 1.08f, bodyDepth * 1.08f, yTop, yTop + roofHeight);
+            // Niveau 0 : Petite dalle intérieure de terrain constructible
+            AddBox(Vector3.zero, baseWidth * 0.82f, baseDepth * 0.82f, foundationHeight, foundationHeight + 0.03f, trisWalls);
         }
-        else if (buildingLevel == 5)
+        else if (buildingLevel == 1)
         {
-            // Niveau 5 (Hôtel) : Gratte-ciel à 3 niveaux en retrait (Style Art Déco / Setbacks)
-            float currentY = foundationHeight;
+            // NIVEAU 1 (5R) : Petit bâtiment de campus (1 étage + porche + toit à 2 pans)
+            float w = baseWidth * 0.72f;
+            float d = baseDepth * 0.72f;
+            float yTop = foundationHeight + floorHeight;
 
-            // Section basse (3 étages, 85% de l'emprise)
-            float h1 = floorHeight * 2.5f;
-            AddBoxSection(baseWidth * 0.85f, baseDepth * 0.85f, currentY, currentY + h1, includeTopCap: true);
-            currentY += h1;
+            // Corps 1 étage
+            AddBox(Vector3.zero, w, d, foundationHeight, yTop, trisWalls);
 
-            // Section médiane en retrait (2 étages, 62% de l'emprise)
-            float h2 = floorHeight * 2.0f;
-            AddBoxSection(baseWidth * 0.62f, baseDepth * 0.62f, currentY, currentY + h2, includeTopCap: true);
-            currentY += h2;
+            // Petit porche d'entrée à l'avant (-Z)
+            float porchW = w * 0.38f;
+            float porchD = d * 0.22f;
+            Vector3 porchCenter = new Vector3(0f, 0f, -(d * 0.5f + porchD * 0.45f));
+            AddBox(porchCenter, porchW, porchD, foundationHeight, foundationHeight + floorHeight * 0.65f, trisWalls);
+            AddPitchedRoof(porchCenter, porchW * 1.15f, porchD * 1.15f, foundationHeight + floorHeight * 0.65f, foundationHeight + floorHeight * 0.88f, trisRoofOwner);
 
-            // Sommet de la tour (1.5 étage, 40% de l'emprise)
-            float h3 = floorHeight * 1.5f;
-            AddBoxSection(baseWidth * 0.40f, baseDepth * 0.40f, currentY, currentY + h3, includeTopCap: true);
-            currentY += h3;
+            // Toit principal
+            AddPitchedRoof(Vector3.zero, w * 1.14f, d * 1.14f, yTop, yTop + roofHeight, trisRoofOwner);
+        }
+        else if (buildingLevel == 2)
+        {
+            // NIVEAU 2 (12R) : Bâtiment universitaire moyen (2 étages + aile latérale + cheminée)
+            float mainW = baseWidth * 0.62f;
+            float mainD = baseDepth * 0.76f;
+            float yTopMain = foundationHeight + (floorHeight * 1.85f);
 
-            // Flèche pyramidale au sommet de l'hôtel
-            AddPyramidSpire(baseWidth * 0.22f, baseDepth * 0.22f, currentY, currentY + roofHeight * 1.4f);
+            // Corps principal décalé légèrement à gauche
+            Vector3 mainCenter = new Vector3(-baseWidth * 0.12f, 0f, 0f);
+            AddBox(mainCenter, mainW, mainD, foundationHeight, yTopMain, trisWalls);
+            AddPitchedRoof(mainCenter, mainW * 1.14f, mainD * 1.14f, yTopMain, yTopMain + roofHeight, trisRoofOwner);
+
+            // Bandeau horizontal du groupe entre le 1er et le 2e étage
+            AddBox(mainCenter, mainW * 1.04f, mainD * 1.04f, foundationHeight + floorHeight * 0.9f, foundationHeight + floorHeight * 1.0f, trisSocleGroup);
+
+            // Aile latérale droite (1.3 étage)
+            float wingW = baseWidth * 0.38f;
+            float wingD = baseDepth * 0.58f;
+            float yTopWing = foundationHeight + (floorHeight * 1.25f);
+            Vector3 wingCenter = new Vector3(baseWidth * 0.24f, 0f, -baseDepth * 0.05f);
+
+            AddBox(wingCenter, wingW, wingD, foundationHeight, yTopWing, trisWalls);
+            AddPitchedRoof(wingCenter, wingW * 1.14f, wingD * 1.14f, yTopWing, yTopWing + (roofHeight * 0.8f), trisRoofOwner);
+
+            // Cheminée sur le corps principal
+            Vector3 chimneyPos = mainCenter + new Vector3(-mainW * 0.28f, 0f, mainD * 0.22f);
+            AddBox(chimneyPos, 0.18f, 0.18f, yTopMain + roofHeight * 0.2f, yTopMain + roofHeight * 1.15f, trisWalls);
+        }
+        else if (buildingLevel >= 3)
+        {
+            // NIVEAU 3 (22R) : Grand Complexe / Amphi Prestigieux (Double corps + toit mansardé + flèche)
+            float mainW = baseWidth * 0.88f;
+            float mainD = baseDepth * 0.78f;
+            float h1 = foundationHeight + (floorHeight * 1.35f);
+            float h2 = h1 + (floorHeight * 1.15f);
+
+            // Premier niveau large
+            AddBox(Vector3.zero, mainW, mainD, foundationHeight, h1, trisWalls);
+
+            // Corniche de couleur du groupe entre les deux niveaux
+            AddBox(Vector3.zero, mainW * 1.05f, mainD * 1.05f, h1, h1 + 0.08f, trisSocleGroup);
+
+            // Second niveau en léger retrait (Pavillon supérieur)
+            float upperW = mainW * 0.78f;
+            float upperD = mainD * 0.78f;
+            AddBox(Vector3.zero, upperW, upperD, h1 + 0.08f, h2, trisWalls);
+
+            // Avant-corps monumental (Entrée d'Amphi)
+            Vector3 frontCenter = new Vector3(0f, 0f, -(mainD * 0.5f + 0.10f));
+            AddBox(frontCenter, mainW * 0.42f, 0.22f, foundationHeight, h2 + 0.05f, trisWalls);
+            AddPitchedRoof(frontCenter, mainW * 0.48f, 0.28f, h2 + 0.05f, h2 + roofHeight * 0.75f, trisRoofOwner);
+
+            // Grand toit mansardé (Pyramide tronquée)
+            AddMansardRoof(Vector3.zero, upperW * 1.12f, upperD * 1.12f, upperW * 0.55f, upperD * 0.55f, h2, h2 + roofHeight * 1.15f, trisRoofOwner);
+
+            // Clocheton / Flèche centrale d'excellence au sommet de l'Amphi
+            float spireBaseY = h2 + roofHeight * 1.15f;
+            AddBox(Vector3.zero, upperW * 0.22f, upperD * 0.22f, spireBaseY, spireBaseY + 0.22f, trisWalls);
+            AddPyramidSpire(Vector3.zero, upperW * 0.26f, upperD * 0.26f, spireBaseY + 0.22f, spireBaseY + 0.22f + roofHeight * 0.95f, trisRoofOwner);
         }
 
-        // 3. Assignation des tableaux mathématiques au Mesh Unity
+        // Assemblage du Mesh à 3 sous-maillages
         generatedMesh.SetVertices(vertices);
-        generatedMesh.SetTriangles(triangles, 0);
         generatedMesh.SetUVs(0, uvs);
+        generatedMesh.subMeshCount = 3;
+        generatedMesh.SetTriangles(trisSocleGroup, 0);
+        generatedMesh.SetTriangles(trisWalls, 1);
+        generatedMesh.SetTriangles(trisRoofOwner, 2);
 
-        // 4. Calcul automatique des vecteurs normaux (éclairage par face) et de la boîte englobante
         generatedMesh.RecalculateNormals();
         generatedMesh.RecalculateBounds();
 
         meshFilter.sharedMesh = generatedMesh;
 
-        // 5. Mise à jour du MeshCollider (uniquement en Play Mode ou hors validation instable)
+        EnsureThreeMaterialSlots();
+        ApplyVisualColors();
+
         if (updateCollider && meshCollider != null && generatedMesh.vertexCount > 0)
         {
             meshCollider.sharedMesh = null;
@@ -141,163 +245,157 @@ public class ProceduralBuildingGenerator : MonoBehaviour
     }
 
     /// <summary>
-    /// Ajoute un prisme rectangulaire (4 murs verticaux + toit plat optionnel).
+    /// Duplique automatiquement la référence du matériau unique sur les 3 slots de sous-maillages.
     /// </summary>
-    private void AddBoxSection(float width, float depth, float yBottom, float yTop, bool includeTopCap)
+    private void EnsureThreeMaterialSlots()
     {
-        float hw = width * 0.5f;
-        float hd = depth * 0.5f;
+        if (meshRenderer == null || meshRenderer.sharedMaterial == null) return;
 
-        // Face Avant (-Z)
-        AddQuad(
-            new Vector3(-hw, yBottom, -hd),
-            new Vector3(-hw, yTop, -hd),
-            new Vector3(hw, yTop, -hd),
-            new Vector3(hw, yBottom, -hd)
-        );
+        Material baseMat = meshRenderer.sharedMaterial;
+        Material[] currentMats = meshRenderer.sharedMaterials;
 
-        // Face Arrière (+Z)
-        AddQuad(
-            new Vector3(hw, yBottom, hd),
-            new Vector3(hw, yTop, hd),
-            new Vector3(-hw, yTop, hd),
-            new Vector3(-hw, yBottom, hd)
-        );
-
-        // Face Gauche (-X)
-        AddQuad(
-            new Vector3(-hw, yBottom, hd),
-            new Vector3(-hw, yTop, hd),
-            new Vector3(-hw, yTop, -hd),
-            new Vector3(-hw, yBottom, -hd)
-        );
-
-        // Face Droite (+X)
-        AddQuad(
-            new Vector3(hw, yBottom, -hd),
-            new Vector3(hw, yTop, -hd),
-            new Vector3(hw, yTop, hd),
-            new Vector3(hw, yBottom, hd)
-        );
-
-        // Face Supérieure (+Y)
-        if (includeTopCap)
+        if (currentMats.Length != 3 || currentMats[0] == null || currentMats[1] == null || currentMats[2] == null)
         {
-            AddQuad(
-                new Vector3(-hw, yTop, -hd),
-                new Vector3(-hw, yTop, hd),
-                new Vector3(hw, yTop, hd),
-                new Vector3(hw, yTop, -hd)
-            );
+            meshRenderer.sharedMaterials = new Material[] { baseMat, baseMat, baseMat };
         }
     }
 
     /// <summary>
-    /// Ajoute un toit à deux pans (2 pentes rectangulaires + 2 pignons triangulaires).
+    /// Applique les couleurs via MaterialPropertyBlock sur chaque sous-maillage (0 = Groupe, 1 = Murs, 2 = Propriétaire).
     /// </summary>
-    private void AddPitchedRoof(float width, float depth, float yBase, float yRidge)
+    public void ApplyVisualColors()
     {
-        float hw = width * 0.5f;
-        float hd = depth * 0.5f;
+        if (meshRenderer == null) meshRenderer = GetComponent<MeshRenderer>();
+        if (meshRenderer == null) return;
 
-        Vector3 ridgeLeft = new Vector3(-hw, yRidge, 0f);
-        Vector3 ridgeRight = new Vector3(hw, yRidge, 0f);
+        if (propBlock == null) propBlock = new MaterialPropertyBlock();
 
-        // Pente Avant (-Z)
-        AddQuad(
-            new Vector3(-hw, yBase, -hd),
-            ridgeLeft,
-            ridgeRight,
-            new Vector3(hw, yBase, -hd)
-        );
+        Color groupCol = customGroupColorOverride != Color.clear
+            ? customGroupColorOverride
+            : GetColorForCampusGroup(campusGroup);
 
-        // Pente Arrière (+Z)
-        AddQuad(
-            new Vector3(hw, yBase, hd),
-            ridgeRight,
-            ridgeLeft,
-            new Vector3(-hw, yBase, hd)
-        );
+        Color roofCol = unownedRoofColor;
+        if (ownerId >= 0 && ownerId < playerOwnerColors.Length)
+        {
+            roofCol = playerOwnerColors[ownerId];
+        }
 
-        // Pignon Gauche (-X)
-        AddTriangle(
-            new Vector3(-hw, yBase, hd),
-            ridgeLeft,
-            new Vector3(-hw, yBase, -hd)
-        );
-
-        // Pignon Droit (+X)
-        AddTriangle(
-            new Vector3(hw, yBase, -hd),
-            ridgeRight,
-            new Vector3(hw, yBase, hd)
-        );
+        // Submesh 0 : Socle & Bandeau (Couleur du groupe de terrain)
+        SetSubmeshColor(0, groupCol);
+        // Submesh 1 : Murs (Pierre claire)
+        SetSubmeshColor(1, wallColor);
+        // Submesh 2 : Toiture (Couleur de l'étudiant propriétaire)
+        SetSubmeshColor(2, roofCol);
     }
 
-    /// <summary>
-    /// Ajoute une flèche pyramidale à 4 faces au sommet d'un gratte-ciel.
-    /// </summary>
-    private void AddPyramidSpire(float width, float depth, float yBase, float yPeak)
+    private void SetSubmeshColor(int submeshIndex, Color color)
     {
-        float hw = width * 0.5f;
-        float hd = depth * 0.5f;
-        Vector3 peak = new Vector3(0f, yPeak, 0f);
+        if (submeshIndex >= meshRenderer.sharedMaterials.Length) return;
 
-        // Face Avant (-Z)
-        AddTriangle(new Vector3(-hw, yBase, -hd), peak, new Vector3(hw, yBase, -hd));
-        // Face Arrière (+Z)
-        AddTriangle(new Vector3(hw, yBase, hd), peak, new Vector3(-hw, yBase, hd));
-        // Face Gauche (-X)
-        AddTriangle(new Vector3(-hw, yBase, hd), peak, new Vector3(-hw, yBase, -hd));
-        // Face Droite (+X)
-        AddTriangle(new Vector3(hw, yBase, -hd), peak, new Vector3(hw, yBase, hd));
+        meshRenderer.GetPropertyBlock(propBlock, submeshIndex);
+        propBlock.SetColor(BaseColorId, color); // Compatible URP
+        propBlock.SetColor(ColorId, color);     // Compatible Built-in Standard
+        meshRenderer.SetPropertyBlock(propBlock, submeshIndex);
     }
 
-    /// <summary>
-    /// Génère une face quadrilatérale (2 triangles en sens horaire / Clockwise) avec ses propres sommets.
-    /// </summary>
-    private void AddQuad(Vector3 bottomLeft, Vector3 topLeft, Vector3 topRight, Vector3 bottomRight)
+    public static Color GetColorForCampusGroup(CampusGroup group)
     {
-        int startIndex = vertices.Count;
-
-        vertices.Add(bottomLeft);  // 0
-        vertices.Add(topLeft);     // 1
-        vertices.Add(topRight);    // 2
-        vertices.Add(bottomRight); // 3
-
-        uvs.Add(new Vector2(0f, 0f));
-        uvs.Add(new Vector2(0f, 1f));
-        uvs.Add(new Vector2(1f, 1f));
-        uvs.Add(new Vector2(1f, 0f));
-
-        // Triangle 1 (Clockwise : 0 -> 1 -> 2)
-        triangles.Add(startIndex + 0);
-        triangles.Add(startIndex + 1);
-        triangles.Add(startIndex + 2);
-
-        // Triangle 2 (Clockwise : 0 -> 2 -> 3)
-        triangles.Add(startIndex + 0);
-        triangles.Add(startIndex + 2);
-        triangles.Add(startIndex + 3);
+        switch (group)
+        {
+            case CampusGroup.Marron:   return new Color(0.55f, 0.32f, 0.18f);
+            case CampusGroup.BleuCiel: return new Color(0.38f, 0.75f, 0.95f);
+            case CampusGroup.Rose:     return new Color(0.92f, 0.38f, 0.68f);
+            case CampusGroup.Orange:   return new Color(0.95f, 0.55f, 0.15f);
+            case CampusGroup.Rouge:    return new Color(0.85f, 0.18f, 0.18f);
+            case CampusGroup.Or:       return new Color(0.95f, 0.78f, 0.15f);
+            default:                   return Color.gray;
+        }
     }
 
-    /// <summary>
-    /// Génère une face triangulaire (sens horaire / Clockwise) avec ses propres sommets.
-    /// </summary>
-    private void AddTriangle(Vector3 v0, Vector3 v1, Vector3 v2)
+    // ==================== PRIMITIVES GÉOMÉTRIQUES PROCÉDURALES ====================
+
+    private void AddBox(Vector3 center, float w, float d, float yMin, float yMax, List<int> targetTris)
     {
-        int startIndex = vertices.Count;
+        float hw = w * 0.5f;
+        float hd = d * 0.5f;
+        float cx = center.x;
+        float cz = center.z;
 
-        vertices.Add(v0);
-        vertices.Add(v1);
-        vertices.Add(v2);
+        // Avant (-Z)
+        AddQuad(new Vector3(cx - hw, yMin, cz - hd), new Vector3(cx - hw, yMax, cz - hd), new Vector3(cx + hw, yMax, cz - hd), new Vector3(cx + hw, yMin, cz - hd), targetTris);
+        // Arrière (+Z)
+        AddQuad(new Vector3(cx + hw, yMin, cz + hd), new Vector3(cx + hw, yMax, cz + hd), new Vector3(cx - hw, yMax, cz + hd), new Vector3(cx - hw, yMin, cz + hd), targetTris);
+        // Gauche (-X)
+        AddQuad(new Vector3(cx - hw, yMin, cz + hd), new Vector3(cx - hw, yMax, cz + hd), new Vector3(cx - hw, yMax, cz - hd), new Vector3(cx - hw, yMin, cz - hd), targetTris);
+        // Droite (+X)
+        AddQuad(new Vector3(cx + hw, yMin, cz - hd), new Vector3(cx + hw, yMax, cz - hd), new Vector3(cx + hw, yMax, cz + hd), new Vector3(cx + hw, yMin, cz + hd), targetTris);
+        // Dessus (+Y)
+        AddQuad(new Vector3(cx - hw, yMax, cz - hd), new Vector3(cx - hw, yMax, cz + hd), new Vector3(cx + hw, yMax, cz + hd), new Vector3(cx + hw, yMax, cz - hd), targetTris);
+    }
 
-        uvs.Add(new Vector2(0f, 0f));
-        uvs.Add(new Vector2(0.5f, 1f));
-        uvs.Add(new Vector2(1f, 0f));
+    private void AddPitchedRoof(Vector3 center, float w, float d, float yBase, float yRidge, List<int> targetTris)
+    {
+        float hw = w * 0.5f;
+        float hd = d * 0.5f;
+        float cx = center.x;
+        float cz = center.z;
 
-        triangles.Add(startIndex + 0);
-        triangles.Add(startIndex + 1);
-        triangles.Add(startIndex + 2);
+        Vector3 ridgeL = new Vector3(cx - hw, yRidge, cz);
+        Vector3 ridgeR = new Vector3(cx + hw, yRidge, cz);
+
+        // Pentes Avant et Arrière (Toiture -> Submesh Propriétaire)
+        AddQuad(new Vector3(cx - hw, yBase, cz - hd), ridgeL, ridgeR, new Vector3(cx + hw, yBase, cz - hd), targetTris);
+        AddQuad(new Vector3(cx + hw, yBase, cz + hd), ridgeR, ridgeL, new Vector3(cx - hw, yBase, cz + hd), targetTris);
+
+        // Pignons Gauche et Droit (Murs -> Submesh Pierre)
+        AddTriangle(new Vector3(cx - hw, yBase, cz + hd), ridgeL, new Vector3(cx - hw, yBase, cz - hd), trisWalls);
+        AddTriangle(new Vector3(cx + hw, yBase, cz - hd), ridgeR, new Vector3(cx + hw, yBase, cz + hd), trisWalls);
+    }
+
+    private void AddMansardRoof(Vector3 center, float wBot, float dBot, float wTop, float dTop, float yBot, float yTop, List<int> targetTris)
+    {
+        float hwb = wBot * 0.5f, hdb = dBot * 0.5f;
+        float hwt = wTop * 0.5f, hdt = dTop * 0.5f;
+        float cx = center.x, cz = center.z;
+
+        // 4 pans inclinés trapézoïdaux
+        AddQuad(new Vector3(cx - hwb, yBot, cz - hdb), new Vector3(cx - hwt, yTop, cz - hdt), new Vector3(cx + hwt, yTop, cz - hdt), new Vector3(cx + hwb, yBot, cz - hdb), targetTris);
+        AddQuad(new Vector3(cx + hwb, yBot, cz + hdb), new Vector3(cx + hwt, yTop, cz + hdt), new Vector3(cx - hwt, yTop, cz + hdt), new Vector3(cx - hwb, yBot, cz + hdb), targetTris);
+        AddQuad(new Vector3(cx - hwb, yBot, cz + hdb), new Vector3(cx - hwt, yTop, cz + hdt), new Vector3(cx - hwt, yTop, cz - hdt), new Vector3(cx - hwb, yBot, cz - hdb), targetTris);
+        AddQuad(new Vector3(cx + hwb, yBot, cz - hdb), new Vector3(cx + hwt, yTop, cz - hdt), new Vector3(cx + hwt, yTop, cz + hdt), new Vector3(cx + hwb, yBot, cz + hdb), targetTris);
+
+        // Terrasse supérieure du toit mansardé
+        AddQuad(new Vector3(cx - hwt, yTop, cz - hdt), new Vector3(cx - hwt, yTop, cz + hdt), new Vector3(cx + hwt, yTop, cz + hdt), new Vector3(cx + hwt, yTop, cz - hdt), targetTris);
+    }
+
+    private void AddPyramidSpire(Vector3 center, float w, float d, float yBase, float yPeak, List<int> targetTris)
+    {
+        float hw = w * 0.5f, hd = d * 0.5f;
+        float cx = center.x, cz = center.z;
+        Vector3 peak = new Vector3(cx, yPeak, cz);
+
+        AddTriangle(new Vector3(cx - hw, yBase, cz - hd), peak, new Vector3(cx + hw, yBase, cz - hd), targetTris);
+        AddTriangle(new Vector3(cx + hw, yBase, cz + hd), peak, new Vector3(cx - hw, yBase, cz + hd), targetTris);
+        AddTriangle(new Vector3(cx - hw, yBase, cz + hd), peak, new Vector3(cx - hw, yBase, cz - hd), targetTris);
+        AddTriangle(new Vector3(cx + hw, yBase, cz - hd), peak, new Vector3(cx + hw, yBase, cz + hd), targetTris);
+    }
+
+    private void AddQuad(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, List<int> targetTris)
+    {
+        int i = vertices.Count;
+        vertices.Add(v0); vertices.Add(v1); vertices.Add(v2); vertices.Add(v3);
+        uvs.Add(new Vector2(0f, 0f)); uvs.Add(new Vector2(0f, 1f)); uvs.Add(new Vector2(1f, 1f)); uvs.Add(new Vector2(1f, 0f));
+
+        targetTris.Add(i); targetTris.Add(i + 1); targetTris.Add(i + 2);
+        targetTris.Add(i); targetTris.Add(i + 2); targetTris.Add(i + 3);
+    }
+
+    private void AddTriangle(Vector3 v0, Vector3 v1, Vector3 v2, List<int> targetTris)
+    {
+        int i = vertices.Count;
+        vertices.Add(v0); vertices.Add(v1); vertices.Add(v2);
+        uvs.Add(new Vector2(0f, 0f)); uvs.Add(new Vector2(0.5f, 1f)); uvs.Add(new Vector2(1f, 0f));
+
+        targetTris.Add(i); targetTris.Add(i + 1); targetTris.Add(i + 2);
     }
 }
