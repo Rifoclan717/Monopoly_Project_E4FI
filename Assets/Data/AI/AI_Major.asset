@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7ab9315a21584e64b66817503b58a6e2, type: 3}
+  m_Name: AI_Major
+  m_EditorClassIdentifier: Assembly-CSharp::CampusTycoon.AI.AIProfile
+  character: 0
+  buyChance: 0.9
+  buyOnlyIfProfitable: 0
+  cashReserve: 50
+  buildChance: 1
+  powerTriggerAmount: 40
+  powerTriggerChance: 1
+  rouletteChance: 0.5
+  incomeWeight: 1
+  blockWeight: 0.8
+  monopolyWeight: 0.8
+  riskWeight: 0.6
