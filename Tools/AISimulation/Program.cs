@@ -15,6 +15,7 @@ namespace CampusTycoon.AI.Simulation
             int games = args.Length > 0 && int.TryParse(args[0], out int n) ? n : 300;
 
             bool ok = Scenarios.RunAll();
+            ok &= BridgeScenarios.RunAll();
             var sw = Stopwatch.StartNew();
 
             SameDifficulty(games);

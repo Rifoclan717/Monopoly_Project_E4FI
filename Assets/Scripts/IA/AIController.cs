@@ -50,6 +50,10 @@ namespace CampusTycoon.AI
             Rebuild();
         }
 
+        /// <summary>Configuration à partir du joueur et du niveau (difficulté lue dans LevelData).</summary>
+        public void Configure(Player player, LevelData level, AIProfile customProfile = null, int randomSeed = 0) =>
+            Configure(player.Index, player.Character.Id, level.Difficulty, customProfile, randomSeed);
+
         private void Rebuild()
         {
             var source = profile != null ? profile : AIProfile.CreateDefault(character);
