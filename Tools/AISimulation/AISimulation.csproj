@@ -22,6 +22,8 @@
     <Compile Include="*.cs" />
     <Compile Include="../../Assets/Scripts/Model/**/*.cs" />
     <Compile Include="../../Assets/Scripts/Core/**/*.cs" />
+    <!-- Bus d'événements : tant qu'il est dans View/ (il passera dans Core/, déjà inclus ci-dessus). -->
+    <Compile Include="../../Assets/Scripts/View/**/CampusEvents.cs" />
     <Compile Include="../../Assets/Scripts/IA/**/*.cs" Exclude="../../Assets/Scripts/IA/Editor/**" />
   </ItemGroup>
 

@@ -7,6 +7,15 @@ namespace UnityEngine
     public class Object
     {
         public string name { get; set; }
+        public static T[] FindObjectsByType<T>(FindObjectsSortMode mode) where T : Object => new T[0];
+    }
+
+    public enum FindObjectsSortMode { None, InstanceID }
+
+    public static class Time
+    {
+        /// <summary>Réglable par les tests.</summary>
+        public static float unscaledTime { get; set; }
     }
 
     public class ScriptableObject : Object
@@ -65,4 +74,15 @@ namespace UnityEngine
 
     [AttributeUsage(AttributeTargets.Method)]
     public sealed class ContextMenu : Attribute { public ContextMenu(string name) { } }
+}
+
+namespace UnityEngine.Events
+{
+    public class UnityEvent<T0, T1>
+    {
+        private System.Action<T0, T1> listeners;
+        public void AddListener(System.Action<T0, T1> call) => listeners += call;
+        public void RemoveListener(System.Action<T0, T1> call) => listeners -= call;
+        public void Invoke(T0 a, T1 b) => listeners?.Invoke(a, b);
+    }
 }
