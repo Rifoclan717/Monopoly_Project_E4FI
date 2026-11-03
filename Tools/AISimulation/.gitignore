@@ -1,0 +1,4 @@
+bin/
+obj/
+# Le .gitignore Unity ignore *.csproj (projets générés) ; celui-ci est écrit à la main.
+!AISimulation.csproj
