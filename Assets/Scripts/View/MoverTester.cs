@@ -1,3 +1,4 @@
+using CampusTycoon;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -9,32 +10,32 @@ public class MoverTester : MonoBehaviour
     public ProceduralDiceRoller diceRoller;
     public CampusHUDController hud;
 
-    private int humanMoney = 1000;
+    [Header("Joueur Actif en Test (0 = Bleu, 1 = Rouge IA1, 2 = Vert IA2)")]
+    [Range(0, 2)] public int activeStudentId = 0;
+
+    private readonly int[] studentMoney = { 1000, 1000, 1000 };
     private int currentTurn = 1;
     private readonly int[] tileOwner = new int[30];
     private readonly int[] tileBuildingLevel = new int[30];
 
     void Start()
     {
-        for (int i = 0; i < tileOwner.Length; i++) tileOwner[i] = -1;
+        for (int i = 0; i < tileOwner.Length; i++)
+        {
+            tileOwner[i] = -1;
+            tileBuildingLevel[i] = 0;
+        }
 
         if (board == null) board = FindFirstObjectByType<ProceduralBoardGenerator>();
-        if (pawn == null) pawn = FindFirstObjectByType<PawnSplineMover>();
 
-        // Colorie le pion en bleu vif (Étudiant Joueur) avec le matériau valide du plateau
-        if (pawn != null && board != null)
+        if (board != null)
         {
-            MeshRenderer mr = pawn.GetComponent<MeshRenderer>();
-            if (mr != null)
-            {
-                mr.sharedMaterial = board.EnsureValidMaterial();
-                MaterialPropertyBlock block = new MaterialPropertyBlock();
-                mr.GetPropertyBlock(block);
-                block.SetColor("_BaseColor", new Color(0.18f, 0.52f, 0.95f));
-                block.SetColor("_Color", new Color(0.18f, 0.52f, 0.95f));
-                mr.SetPropertyBlock(block);
-            }
-            pawn.SnapToTile(board, 0);
+            board.EnsureThreeStudentPawns();
+            pawn = board.GetStudentPawn(activeStudentId);
+        }
+        else if (pawn == null)
+        {
+            pawn = FindFirstObjectByType<PawnSplineMover>();
         }
 
         if (diceRoller == null)
@@ -58,12 +59,24 @@ public class MoverTester : MonoBehaviour
             }
         }
 
-        CampusEvents.RaiseTurnStarted(0, currentTurn, 15);
+        CampusEvents.RaiseTurnStarted(activeStudentId, currentTurn, 15);
     }
 
     void Update()
     {
-        if (Keyboard.current == null || board == null || pawn == null) return;
+        if (Keyboard.current == null || board == null) return;
+
+        pawn = board.GetStudentPawn(activeStudentId);
+        if (pawn == null) return;
+
+        // [TAB] : Changer d'étudiant actif (0 = Bleu Humain -> 1 = Rouge IA1 -> 2 = Vert IA2)
+        if (Keyboard.current.tabKey.wasPressedThisFrame && !pawn.IsMoving)
+        {
+            activeStudentId = (activeStudentId + 1) % 3;
+            if (activeStudentId == 0) currentTurn = Mathf.Min(15, currentTurn + 1);
+            pawn = board.GetStudentPawn(activeStudentId);
+            CampusEvents.RaiseTurnStarted(activeStudentId, currentTurn, 15);
+        }
 
         // [ESPACE] : Lancer les 2 dés (ou ignorer l'animation) et avancer sur la Spline
         if (Keyboard.current.spaceKey.wasPressedThisFrame)
@@ -75,11 +88,12 @@ public class MoverTester : MonoBehaviour
             }
             if (pawn.IsMoving) return;
 
+            int playerId = activeStudentId;
             int d1 = Random.Range(1, 7);
             int d2 = Random.Range(1, 7);
             int total = d1 + d2;
 
-            CampusEvents.RaiseDiceRolled(0, d1, d2);
+            CampusEvents.RaiseDiceRolled(playerId, d1, d2);
 
             diceRoller.RollDice(d1, d2, (r1, r2) =>
             {
@@ -88,18 +102,18 @@ public class MoverTester : MonoBehaviour
                     total,
                     onPassedLaRentree: () =>
                     {
-                        humanMoney += 150;
-                        CampusEvents.RaiseMoneyChanged(0, humanMoney, 150);
+                        studentMoney[playerId] += 150;
+                        CampusEvents.RaiseMoneyChanged(playerId, studentMoney[playerId], 150);
                     },
                     onMovementFinished: (landedIdx) =>
                     {
-                        CampusEvents.RaisePlayerMoved(0, landedIdx, total, false);
-                        EvaluateLandedTile(landedIdx);
+                        CampusEvents.RaisePlayerMoved(playerId, landedIdx, total, false);
+                        EvaluateLandedTile(playerId, landedIdx);
                     });
             });
         }
 
-        // [A] : Acheter le terrain ou construire un niveau supérieur (1 -> 2 -> 3) sur la case actuelle !
+        // [A] : Acheter le terrain nu (Niveau 0 avec bordure/borne propriétaire) puis améliorer (Niv. 1 -> 2 -> 3)
         if (Keyboard.current.aKey.wasPressedThisFrame && !pawn.IsMoving)
         {
             int idx = pawn.currentTileIndex;
@@ -110,22 +124,22 @@ public class MoverTester : MonoBehaviour
                 {
                     if (tileOwner[idx] == -1)
                     {
-                        // Achat initial du terrain -> Toit Bleu (Joueur 0)
-                        tileOwner[idx] = 0;
-                        tileBuildingLevel[idx] = 1;
-                        humanMoney -= tile.price;
-                        board.UpdatePropertyVisual(idx, 0, 1);
-                        CampusEvents.RaiseMoneyChanged(0, humanMoney, -tile.price);
-                        CampusEvents.RaisePropertyBought(0, idx, tile.price);
+                        // Tâche 3 : Achat initial du terrain au niveau 0 (bordure + borne propriétaire)
+                        tileOwner[idx] = activeStudentId;
+                        tileBuildingLevel[idx] = 0;
+                        studentMoney[activeStudentId] -= tile.price;
+                        board.UpdatePropertyVisual(idx, activeStudentId, 0);
+                        CampusEvents.RaiseMoneyChanged(activeStudentId, studentMoney[activeStudentId], -tile.price);
+                        CampusEvents.RaisePropertyBought(activeStudentId, idx, tile.price);
                     }
-                    else if (tileBuildingLevel[idx] < 3)
+                    else if (tileOwner[idx] == activeStudentId && tileBuildingLevel[idx] < 3)
                     {
-                        // Amélioration du bâtiment (Niveau 2 puis Niveau 3 Amphi !)
+                        // Amélioration du bâtiment (Niveau 1 -> Niveau 2 -> Niveau 3 Amphi)
                         tileBuildingLevel[idx]++;
-                        humanMoney -= 50;
-                        board.UpdatePropertyVisual(idx, 0, tileBuildingLevel[idx]);
-                        CampusEvents.RaiseMoneyChanged(0, humanMoney, -50);
-                        CampusEvents.RaisePropertyUpgraded(0, idx, tileBuildingLevel[idx]);
+                        studentMoney[activeStudentId] -= 50;
+                        board.UpdatePropertyVisual(idx, activeStudentId, tileBuildingLevel[idx]);
+                        CampusEvents.RaiseMoneyChanged(activeStudentId, studentMoney[activeStudentId], -50);
+                        CampusEvents.RaisePropertyUpgraded(activeStudentId, idx, tileBuildingLevel[idx]);
                     }
                 }
             }
@@ -144,10 +158,10 @@ public class MoverTester : MonoBehaviour
             CampusEvents.RaiseGlobalEventStarted(events[r, 0], events[r, 1]);
         }
 
-        // [K] : Piocher une des 12 Cartes Événement officielles
+        // [K] : Piocher une des Cartes Événement officielles
         if (Keyboard.current.kKey.wasPressedThisFrame && !pawn.IsMoving)
         {
-            TriggerRandomCampusCard();
+            TriggerRandomCampusCard(activeStudentId);
         }
 
         // [C] : Tester le saut parabolique direct en Colle
@@ -155,17 +169,22 @@ public class MoverTester : MonoBehaviour
         {
             int colleIdx = GetColleTileIndex();
             pawn.SendDirectlyToColle(board, colleIdx);
-            CampusEvents.RaisePlayerMoved(0, colleIdx, 0, true);
+            CampusEvents.RaisePlayerMoved(activeStudentId, colleIdx, 0, true);
         }
 
         // [T] : Mode Turbo (x3 pour simuler la vitesse des tours d'IA)
         if (Keyboard.current.tKey.wasPressedThisFrame)
         {
-            pawn.speedMultiplier = (pawn.speedMultiplier > 1.5f) ? 1f : 3f;
+            float newSpeed = (pawn.speedMultiplier > 1.5f) ? 1f : 3f;
+            for (int i = 0; i < 3; i++)
+            {
+                PawnSplineMover p = board.GetStudentPawn(i);
+                if (p != null) p.speedMultiplier = newSpeed;
+            }
         }
     }
 
-    private void EvaluateLandedTile(int tileIndex)
+    private void EvaluateLandedTile(int playerId, int tileIndex)
     {
         ProceduralTileView tile = board.generatedTiles[tileIndex];
 
@@ -178,7 +197,7 @@ public class MoverTester : MonoBehaviour
 
         if (tile.category == ProceduralTileView.TileCategory.EventCard)
         {
-            TriggerRandomCampusCard();
+            TriggerRandomCampusCard(playerId);
         }
         else if (tile.category == ProceduralTileView.TileCategory.Property && hud != null)
         {
@@ -186,31 +205,31 @@ public class MoverTester : MonoBehaviour
         }
     }
 
-    private void TriggerRandomCampusCard()
+    private void TriggerRandomCampusCard(int playerId)
     {
         int cardPick = Random.Range(1, 5);
         if (cardPick == 1)
         {
-            CampusEvents.RaiseCardDrawn(0, 2, "Bourse de mérite", "Recevez 100 € !");
-            humanMoney += 100;
-            CampusEvents.RaiseMoneyChanged(0, humanMoney, 100);
+            CampusEvents.RaiseCardDrawn(playerId, 2, "Bourse de mérite", "Recevez 100 € !");
+            studentMoney[playerId] += 100;
+            CampusEvents.RaiseMoneyChanged(playerId, studentMoney[playerId], 100);
         }
         else if (cardPick == 2)
         {
-            CampusEvents.RaiseCardDrawn(0, 4, "Panne de RER", "Reculez de 3 cases !");
+            CampusEvents.RaiseCardDrawn(playerId, 4, "Panne de RER", "Reculez de 3 cases !");
             pawn.MoveStepsOnBoard(board, -3);
         }
         else if (cardPick == 3)
         {
-            CampusEvents.RaiseCardDrawn(0, 1, "Soirée BDE", "Payez 60 € !");
-            humanMoney -= 60;
-            CampusEvents.RaiseMoneyChanged(0, humanMoney, -60);
+            CampusEvents.RaiseCardDrawn(playerId, 1, "Soirée BDE", "Payez 60 € !");
+            studentMoney[playerId] -= 60;
+            CampusEvents.RaiseMoneyChanged(playerId, studentMoney[playerId], -60);
         }
         else
         {
-            CampusEvents.RaiseCardDrawn(0, 7, "Hackathon gagné", "Chaque rival vous donne 40 € (+80 €) !");
-            humanMoney += 80;
-            CampusEvents.RaiseMoneyChanged(0, humanMoney, 80);
+            CampusEvents.RaiseCardDrawn(playerId, 7, "Hackathon gagné", "Chaque rival vous donne 40 € (+80 €) !");
+            studentMoney[playerId] += 80;
+            CampusEvents.RaiseMoneyChanged(playerId, studentMoney[playerId], 80);
         }
     }
 

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CampusTycoon;
 using UnityEngine;
 
 public class ProceduralBoardGenerator : MonoBehaviour
@@ -24,15 +25,19 @@ public class ProceduralBoardGenerator : MonoBehaviour
         }
     }
 
-    [Header("Configuration Campus Tycoon (Niveaux 1 à 3)")]
+    [Header("Source Unique des Données (Modèle LevelData)")]
+    [Tooltip("Asset LevelData du niveau. S'il est renseigné, le plateau lit ses SquareData comme unique source.")]
+    public LevelData levelData;
+
+    [Header("Configuration Campus Tycoon (Secours tant que LevelData est vide)")]
     [Tooltip("1 = Première semaine (16 cases), 2 = Mi-semestre (20 cases), 3 = Semestre en folie (24 cases)")]
     [Range(1, 3)] public int campusLevel = 2;
 
-    [Tooltip("Niveau initial des bâtiments (mets 1, 2 ou 3 pour voir les maisons dès le départ, ou 0 pour terrain nu)")]
-    [Range(0, 3)] public int previewBuildingLevel = 1;
+    [Tooltip("Niveau initial des bâtiments (0 pour une vraie partie : terrains nus au départ)")]
+    [Range(0, 3)] public int previewBuildingLevel = 0;
 
-    [Tooltip("Si activé, varie les tailles de maisons (Niv 1 à 3) pour donner un vrai look de ville/campus vivant")]
-    public bool livelyCampusShowcase = true;
+    [Tooltip("Si activé en mode aperçu (previewBuildingLevel > 0), varie les tailles de maisons (Niv 1 à 3)")]
+    public bool livelyCampusShowcase = false;
 
     [Header("Dimensions Géométriques du Plateau")]
     public float regularTileWidth = 2.4f;
@@ -46,6 +51,16 @@ public class ProceduralBoardGenerator : MonoBehaviour
     public Material sharedBoardMaterial;
     public Transform cameraTargetToCenter;
 
+    [Header("Pions des 3 Étudiants (0 = Bleu Humain, 1 = Rouge IA1, 2 = Vert IA2)")]
+    public PawnSplineMover[] studentPawns = new PawnSplineMover[3];
+
+    public static readonly Color[] StudentPawnColors = new Color[]
+    {
+        new Color(0.18f, 0.52f, 0.95f), // 0 : Joueur Humain (Bleu)
+        new Color(0.90f, 0.22f, 0.25f), // 1 : Rival IA 1 (Rouge)
+        new Color(0.20f, 0.78f, 0.42f)  // 2 : Rival IA 2 (Vert)
+    };
+
     [Header("Cases Générées (Lecture Seule)")]
     public List<ProceduralTileView> generatedTiles = new List<ProceduralTileView>();
 
@@ -53,32 +68,103 @@ public class ProceduralBoardGenerator : MonoBehaviour
     private int lastBuiltLevel = -1;
     private int lastPreviewBuildingLevel = -1;
     private bool lastShowcaseState = false;
+    private LevelData lastLevelData = null;
+
+    // Suivi interne de l'état visuel des cases pour la mise à jour par événements (Tâche 5)
+    private readonly List<int> tileOwners = new List<int>();
+    private readonly List<int> tileBuildingLevels = new List<int>();
 
     void Awake()
     {
         EnsureValidMaterial();
     }
 
+    void OnEnable()
+    {
+        // Tâche 5 : Vue pilotée par les événements de CampusEvents
+        CampusEvents.OnPropertyBought += HandlePropertyBought;
+        CampusEvents.OnPropertyUpgraded += HandlePropertyUpgraded;
+        CampusEvents.OnPlayerBankrupt += HandlePlayerBankrupt;
+    }
+
+    void OnDisable()
+    {
+        CampusEvents.OnPropertyBought -= HandlePropertyBought;
+        CampusEvents.OnPropertyUpgraded -= HandlePropertyUpgraded;
+        CampusEvents.OnPlayerBankrupt -= HandlePlayerBankrupt;
+    }
+
     void Start()
     {
-        GenerateCampusBoard(campusLevel);
+        // Tâche 3 : dès qu'une vraie partie démarre en Play Mode, les terrains commencent au niveau 0
+        previewBuildingLevel = 0;
+        livelyCampusShowcase = false;
+
+        if (levelData != null && levelData.SquareCount > 0)
+        {
+            GenerateCampusBoard(levelData);
+        }
+        else
+        {
+            GenerateCampusBoard(campusLevel);
+        }
+
+        EnsureThreeStudentPawns();
     }
 
 #if UNITY_EDITOR
     void OnValidate()
     {
-        if (lastBuiltLevel != campusLevel || lastPreviewBuildingLevel != previewBuildingLevel || lastShowcaseState != livelyCampusShowcase)
+        if (lastBuiltLevel != campusLevel ||
+            lastPreviewBuildingLevel != previewBuildingLevel ||
+            lastShowcaseState != livelyCampusShowcase ||
+            lastLevelData != levelData)
         {
             UnityEditor.EditorApplication.delayCall += () =>
             {
                 if (this != null)
                 {
-                    GenerateCampusBoard(campusLevel);
+                    if (levelData != null && levelData.SquareCount > 0)
+                        GenerateCampusBoard(levelData);
+                    else
+                        GenerateCampusBoard(campusLevel);
                 }
             };
         }
     }
 #endif
+
+    // ==================== RÉACTIONS AUX ÉVÉNEMENTS (TÂCHE 5) ====================
+
+    private void HandlePropertyBought(int playerId, int tileIndex, int price)
+    {
+        // Lors d'un achat, le terrain est acquis au niveau 0 (terrain nu avec bordure/borne propriétaire)
+        UpdatePropertyVisual(tileIndex, playerId, 0);
+    }
+
+    private void HandlePropertyUpgraded(int playerId, int tileIndex, int newLevel)
+    {
+        UpdatePropertyVisual(tileIndex, playerId, newLevel);
+    }
+
+    private void HandlePlayerBankrupt(int playerId, int creditorId)
+    {
+        for (int i = 0; i < generatedTiles.Count; i++)
+        {
+            if (i < tileOwners.Count && tileOwners[i] == playerId)
+            {
+                if (creditorId >= 0)
+                {
+                    int currentLvl = (i < tileBuildingLevels.Count) ? tileBuildingLevels[i] : 0;
+                    UpdatePropertyVisual(i, creditorId, currentLvl);
+                }
+                else
+                {
+                    UpdatePropertyVisual(i, -1, 0);
+                }
+            }
+        }
+    }
 
     /// <summary>
     /// Crée automatiquement un matériau compatible Unity 6 URP / Standard si aucun n'est assigné (élimine le rose fluo).
@@ -102,6 +188,120 @@ public class ProceduralBoardGenerator : MonoBehaviour
         return sharedBoardMaterial;
     }
 
+    // ==================== CONVERSIONS MODÈLE (LevelData / SquareData) -> VUE 3D ====================
+
+    /// <summary>
+    /// Tâche 2 : Convertit le groupe de couleur du modèle (ColorGroup) vers celui de la vue 3D (CampusGroup).
+    /// Les 6 groupes sont dans le même ordre.
+    /// </summary>
+    public static ProceduralBuildingGenerator.CampusGroup ToCampusGroup(ColorGroup group)
+    {
+        switch (group)
+        {
+            case ColorGroup.Brown:     return ProceduralBuildingGenerator.CampusGroup.Marron;
+            case ColorGroup.LightBlue: return ProceduralBuildingGenerator.CampusGroup.BleuCiel;
+            case ColorGroup.Pink:      return ProceduralBuildingGenerator.CampusGroup.Rose;
+            case ColorGroup.Orange:    return ProceduralBuildingGenerator.CampusGroup.Orange;
+            case ColorGroup.Red:       return ProceduralBuildingGenerator.CampusGroup.Rouge;
+            case ColorGroup.Gold:      return ProceduralBuildingGenerator.CampusGroup.Or;
+            default:                   return ProceduralBuildingGenerator.CampusGroup.Marron;
+        }
+    }
+
+    /// <summary>
+    /// Tâche 2 : Convertit le type de case du modèle (SquareType) vers la catégorie visuelle (TileCategory).
+    /// Start, Detention, StudentLounge et GoToDetention donnent Corner ; Utility donne Company ; Roulette donne Special.
+    /// </summary>
+    public static ProceduralTileView.TileCategory ToTileCategory(SquareType type)
+    {
+        switch (type)
+        {
+            case SquareType.Start:
+            case SquareType.Detention:
+            case SquareType.StudentLounge:
+            case SquareType.GoToDetention:
+                return ProceduralTileView.TileCategory.Corner;
+            case SquareType.Property:
+                return ProceduralTileView.TileCategory.Property;
+            case SquareType.Station:
+                return ProceduralTileView.TileCategory.Station;
+            case SquareType.Utility:
+                return ProceduralTileView.TileCategory.Company;
+            case SquareType.Tax:
+                return ProceduralTileView.TileCategory.Tax;
+            case SquareType.EventCard:
+                return ProceduralTileView.TileCategory.EventCard;
+            case SquareType.Roulette:
+                return ProceduralTileView.TileCategory.Special;
+            default:
+                return ProceduralTileView.TileCategory.Corner;
+        }
+    }
+
+    /// <summary>
+    /// Convertit un asset SquareData en définition visuelle CampusSquareDefinition.
+    /// </summary>
+    public static CampusSquareDefinition FromSquareData(SquareData sq)
+    {
+        if (sq == null)
+        {
+            return new CampusSquareDefinition("Case vide", ProceduralTileView.TileCategory.Corner);
+        }
+
+        ProceduralTileView.TileCategory cat = ToTileCategory(sq.Type);
+        ProceduralBuildingGenerator.CampusGroup grp = ToCampusGroup(sq.Group);
+
+        int displayedCost = 0;
+        if (sq.IsOwnable)
+        {
+            displayedCost = sq.Price;
+        }
+        else if (sq.Type == SquareType.Tax || sq.Type == SquareType.Roulette)
+        {
+            displayedCost = sq.Amount;
+        }
+
+        return new CampusSquareDefinition(sq.DisplayName, cat, displayedCost, grp);
+    }
+
+    // ==================== GÉNÉRATION DU PLATEAU ====================
+
+    /// <summary>
+    /// Tâche 2 & 3 : Génère le plateau 3D directement depuis un asset LevelData.
+    /// Force previewBuildingLevel = 0 en partie réelle pour que tous les terrains démarrent nus.
+    /// </summary>
+    public void GenerateCampusBoard(LevelData data)
+    {
+        if (data == null || data.SquareCount == 0)
+        {
+            GenerateCampusBoard(campusLevel);
+            return;
+        }
+
+        EnsureValidMaterial();
+
+        levelData = data;
+        lastLevelData = data;
+        campusLevel = Mathf.Clamp(data.LevelNumber, 1, 3);
+        lastBuiltLevel = campusLevel;
+
+        if (Application.isPlaying)
+        {
+            previewBuildingLevel = 0;
+            livelyCampusShowcase = false;
+        }
+        lastPreviewBuildingLevel = previewBuildingLevel;
+        lastShowcaseState = livelyCampusShowcase;
+
+        CampusSquareDefinition[] layout = new CampusSquareDefinition[data.SquareCount];
+        for (int i = 0; i < data.SquareCount; i++)
+        {
+            layout[i] = FromSquareData(data.Squares[i]);
+        }
+
+        BuildBoardFromLayout(layout);
+    }
+
     [ContextMenu("Regénérer le Plateau Campus Tycoon")]
     public void GenerateCampusBoard(int level)
     {
@@ -111,8 +311,27 @@ public class ProceduralBoardGenerator : MonoBehaviour
         lastBuiltLevel = campusLevel;
         lastPreviewBuildingLevel = previewBuildingLevel;
         lastShowcaseState = livelyCampusShowcase;
+        lastLevelData = levelData;
 
-        CampusSquareDefinition[] layout = GetLayoutForLevel(campusLevel);
+        // Si un LevelData correspondant est assigné, on l'utilise en priorité
+        if (levelData != null && levelData.SquareCount > 0)
+        {
+            CampusSquareDefinition[] dataLayout = new CampusSquareDefinition[levelData.SquareCount];
+            for (int i = 0; i < levelData.SquareCount; i++)
+            {
+                dataLayout[i] = FromSquareData(levelData.Squares[i]);
+            }
+            BuildBoardFromLayout(dataLayout);
+            return;
+        }
+
+        // Secours tant que les assets LevelData de Franck ne sont pas sur main
+        CampusSquareDefinition[] fallbackLayout = GetLayoutForLevel(campusLevel);
+        BuildBoardFromLayout(fallbackLayout);
+    }
+
+    private void BuildBoardFromLayout(CampusSquareDefinition[] layout)
+    {
         int totalTiles = layout.Length;
         int tilesPerSide = totalTiles / 4;
         int regularCountPerSide = tilesPerSide - 1;
@@ -161,7 +380,137 @@ public class ProceduralBoardGenerator : MonoBehaviour
         {
             cameraTargetToCenter.position = transform.position;
         }
+
+        // 4. Repositionnement des 3 pions sur la case 0 si présents
+        SnapAllPawnsToStart();
     }
+
+    // ==================== GESTION DES 3 PIONS ÉTUDIANTS (TÂCHE 4) ====================
+
+    /// <summary>
+    /// Tâche 4 : Garantit l'existence des 3 pions étudiants (0 = Bleu Humain, 1 = Rouge IA 1, 2 = Vert IA 2)
+    /// et les place sur les 3 emplacements (PawnSlot_0..2) de la case 0 (La Rentrée).
+    /// </summary>
+    [ContextMenu("Créer / Replacer les 3 Pions Étudiants")]
+    public void EnsureThreeStudentPawns()
+    {
+        EnsureValidMaterial();
+
+        if (studentPawns == null || studentPawns.Length != 3)
+        {
+            studentPawns = new PawnSplineMover[3];
+        }
+
+        // Récupère les pions déjà présents dans la scène s'ils ne sont pas encore référencés
+        PawnSplineMover[] existingInScene = FindObjectsByType<PawnSplineMover>(FindObjectsSortMode.None);
+        foreach (PawnSplineMover p in existingInScene)
+        {
+            int id = Mathf.Clamp(p.studentId, 0, 2);
+            if (studentPawns[id] == null)
+            {
+                studentPawns[id] = p;
+            }
+        }
+
+        string[] pawnNames = { "StudentPawn_0_Player", "StudentPawn_1_AI1", "StudentPawn_2_AI2" };
+
+        for (int i = 0; i < 3; i++)
+        {
+            if (studentPawns[i] == null)
+            {
+                studentPawns[i] = CreateProceduralStudentPawn(i, pawnNames[i]);
+            }
+            else
+            {
+                studentPawns[i].studentId = i;
+                studentPawns[i].gameObject.name = pawnNames[i];
+                ApplyPawnColor(studentPawns[i].gameObject, StudentPawnColors[i]);
+            }
+
+            studentPawns[i].SnapToTile(this, 0, false);
+        }
+    }
+
+    /// <summary>
+    /// Renvoie le pion de l'étudiant demandé (0 = Humain, 1 = IA 1, 2 = IA 2).
+    /// </summary>
+    public PawnSplineMover GetStudentPawn(int playerId)
+    {
+        int clamped = Mathf.Clamp(playerId, 0, 2);
+        if (studentPawns == null || studentPawns.Length <= clamped || studentPawns[clamped] == null)
+        {
+            EnsureThreeStudentPawns();
+        }
+        return studentPawns[clamped];
+    }
+
+    /// <summary>
+    /// Replace les pions existants sur les 3 emplacements de la case 0.
+    /// </summary>
+    public void SnapAllPawnsToStart()
+    {
+        if (generatedTiles.Count == 0 || studentPawns == null) return;
+        for (int i = 0; i < studentPawns.Length; i++)
+        {
+            if (studentPawns[i] != null)
+            {
+                studentPawns[i].studentId = i;
+                studentPawns[i].SnapToTile(this, 0, false);
+            }
+        }
+    }
+
+    private PawnSplineMover CreateProceduralStudentPawn(int studentId, string objName)
+    {
+        GameObject pawnRoot = new GameObject(objName);
+        pawnRoot.transform.SetParent(transform, true);
+
+        // Corps du pion (cylindre/capsule dont la base repose exactement à y = 0)
+        CreateColoredPrimitive(
+            PrimitiveType.Cylinder,
+            "Pawn_Base",
+            pawnRoot.transform,
+            new Vector3(0f, 0.06f, 0f),
+            new Vector3(0.36f, 0.06f, 0.36f),
+            StudentPawnColors[studentId]);
+
+        CreateColoredPrimitive(
+            PrimitiveType.Cylinder,
+            "Pawn_Body",
+            pawnRoot.transform,
+            new Vector3(0f, 0.24f, 0f),
+            new Vector3(0.24f, 0.16f, 0.24f),
+            StudentPawnColors[studentId]);
+
+        CreateColoredPrimitive(
+            PrimitiveType.Sphere,
+            "Pawn_Head",
+            pawnRoot.transform,
+            new Vector3(0f, 0.48f, 0f),
+            new Vector3(0.26f, 0.26f, 0.26f),
+            StudentPawnColors[studentId]);
+
+        PawnSplineMover mover = pawnRoot.AddComponent<PawnSplineMover>();
+        mover.studentId = studentId;
+        return mover;
+    }
+
+    private void ApplyPawnColor(GameObject pawnObj, Color col)
+    {
+        MeshRenderer[] renderers = pawnObj.GetComponentsInChildren<MeshRenderer>(true);
+        MaterialPropertyBlock block = new MaterialPropertyBlock();
+
+        foreach (MeshRenderer mr in renderers)
+        {
+            if (sharedBoardMaterial != null) mr.sharedMaterial = sharedBoardMaterial;
+            mr.GetPropertyBlock(block);
+            block.SetColor("_BaseColor", col);
+            block.SetColor("_Color", col);
+            mr.SetPropertyBlock(block);
+        }
+    }
+
+    // ==================== CONSTRUCTION GÉOMÉTRIQUE DES CASES & DÉCOR ====================
 
     private void CreateTileAndBuilding(
         int index,
@@ -191,6 +540,9 @@ public class ProceduralBoardGenerator : MonoBehaviour
             sharedMat: sharedBoardMaterial
         );
 
+        int displayedLevel = previewBuildingLevel;
+        int displayedOwner = -1;
+
         if (def.category == ProceduralTileView.TileCategory.Property)
         {
             GameObject bObj = new GameObject($"Building_{def.name}");
@@ -206,12 +558,9 @@ public class ProceduralBoardGenerator : MonoBehaviour
             building.baseWidth = w * 0.76f;
             building.baseDepth = d * 0.36f;
 
-            int displayedLevel = previewBuildingLevel;
-            int displayedOwner = -1;
-
             if (livelyCampusShowcase && previewBuildingLevel > 0)
             {
-                displayedLevel = 1 + (index % 3); // Alterne Niv 1, 2 et 3 pour un campus très visuel
+                displayedLevel = 1 + (index % 3); // Alterne Niv 1, 2 et 3 uniquement en mode aperçu vitrine
             }
 
             building.SetCampusBuildingState(displayedLevel, displayedOwner, def.group);
@@ -224,6 +573,8 @@ public class ProceduralBoardGenerator : MonoBehaviour
         }
 
         generatedTiles.Add(tileView);
+        tileOwners.Add(displayedOwner);
+        tileBuildingLevels.Add(displayedLevel);
     }
 
     /// <summary>
@@ -348,6 +699,8 @@ public class ProceduralBoardGenerator : MonoBehaviour
     private void ClearExistingBoard()
     {
         generatedTiles.Clear();
+        tileOwners.Clear();
+        tileBuildingLevels.Clear();
 
         for (int i = transform.childCount - 1; i >= 0; i--)
         {
@@ -364,14 +717,36 @@ public class ProceduralBoardGenerator : MonoBehaviour
         tilesContainer = containerObj.transform;
     }
 
+    /// <summary>
+    /// Met à jour l'affichage d'un terrain (propriétaire -1..2 et niveau d'amélioration 0..3).
+    /// Au niveau 0 avec ownerId >= 0, affiche la bordure et la borne aux couleurs du propriétaire.
+    /// </summary>
     public void UpdatePropertyVisual(int tileIndex, int ownerId, int buildingLevel)
     {
         if (tileIndex < 0 || tileIndex >= generatedTiles.Count) return;
+
+        if (tileIndex < tileOwners.Count) tileOwners[tileIndex] = ownerId;
+        if (tileIndex < tileBuildingLevels.Count) tileBuildingLevels[tileIndex] = buildingLevel;
+
         ProceduralTileView tile = generatedTiles[tileIndex];
         if (tile != null && tile.buildingInstance != null)
         {
             tile.buildingInstance.SetCampusBuildingState(buildingLevel, ownerId, tile.propertyGroup);
         }
+    }
+
+    /// <summary>
+    /// Réinitialise tous les bâtiments du plateau à l'état non-possédé (ownerId = -1, niveau = 0).
+    /// </summary>
+    public void ResetAllPropertiesForNewGame()
+    {
+        previewBuildingLevel = 0;
+        livelyCampusShowcase = false;
+        for (int i = 0; i < generatedTiles.Count; i++)
+        {
+            UpdatePropertyVisual(i, -1, 0);
+        }
+        SnapAllPawnsToStart();
     }
 
     public Vector3 GetPawnWorldPosition(int tileIndex, int playerId, bool inColle = false)
@@ -381,6 +756,9 @@ public class ProceduralBoardGenerator : MonoBehaviour
         return generatedTiles[wrappedIndex].GetStudentPawnPosition(playerId, inColle);
     }
 
+    /// <summary>
+    /// Disposition de secours (utilisée uniquement tant que les assets LevelData de Franck ne sont pas assignés).
+    /// </summary>
     private CampusSquareDefinition[] GetLayoutForLevel(int level)
     {
         var C = ProceduralTileView.TileCategory.Corner;

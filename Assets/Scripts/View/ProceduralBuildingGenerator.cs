@@ -17,8 +17,8 @@ public class ProceduralBuildingGenerator : MonoBehaviour
     }
 
     [Header("État Campus Tycoon (Règles du jeu)")]
-    [Tooltip("0 = Terrain nu, 1 = Niv.1 (5R), 2 = Niv.2 (12R), 3 = Niv.3 (22R)")]
-    [Range(0, 3)] public int buildingLevel = 1;
+    [Tooltip("0 = Terrain nu (affiche la bordure/borne du propriétaire si acheté), 1 = Niv.1 (5R), 2 = Niv.2 (12R), 3 = Niv.3 (22R)")]
+    [Range(0, 3)] public int buildingLevel = 0;
 
     [Tooltip("-1 = Aucun propriétaire, 0 = Joueur Humain, 1 = Rival IA 1, 2 = Rival IA 2")]
     [Range(-1, 2)] public int ownerId = -1;
@@ -87,13 +87,13 @@ public class ProceduralBuildingGenerator : MonoBehaviour
 
     /// <summary>
     /// Appelé lors de l'achat (OnPropertyBought) ou de l'initialisation de la case.
-    /// Colorie le toit selon le propriétaire (-1 à 2) et le socle selon la couleur du groupe.
+    /// Colorie le toit/bordure selon le propriétaire (-1 à 2) et le socle selon la couleur du groupe.
     /// </summary>
     public void SetOwnerVisual(int newOwnerId, Color groupColor)
     {
         ownerId = Mathf.Clamp(newOwnerId, -1, 2);
         customGroupColorOverride = groupColor;
-        ApplyVisualColors();
+        RebuildMesh();
     }
 
     /// <summary>
@@ -138,7 +138,32 @@ public class ProceduralBuildingGenerator : MonoBehaviour
         if (buildingLevel == 0)
         {
             // Niveau 0 : Petite dalle intérieure de terrain constructible
-            AddBox(Vector3.zero, baseWidth * 0.82f, baseDepth * 0.82f, foundationHeight, foundationHeight + 0.03f, trisWalls);
+            float slabTop = foundationHeight + 0.03f;
+            AddBox(Vector3.zero, baseWidth * 0.82f, baseDepth * 0.82f, foundationHeight, slabTop, trisWalls);
+
+            // Tâche 3 : Si le terrain est acheté sans amélioration (ownerId >= 0),
+            // afficher clairement la couleur du propriétaire (bordure encadrante + borne/enseigne sur trisRoofOwner)
+            if (ownerId >= 0)
+            {
+                float borderW = baseWidth * 0.86f;
+                float borderD = baseDepth * 0.86f;
+                float borderThickness = Mathf.Min(baseWidth, baseDepth) * 0.10f;
+                float borderYMax = slabTop + 0.06f;
+
+                // 4 bordures aux couleurs du propriétaire autour de la parcelle
+                float halfZ = (borderD - borderThickness) * 0.5f;
+                float halfX = (borderW - borderThickness) * 0.5f;
+                AddBox(new Vector3(0f, 0f, -halfZ), borderW, borderThickness, foundationHeight, borderYMax, trisRoofOwner);
+                AddBox(new Vector3(0f, 0f, halfZ), borderW, borderThickness, foundationHeight, borderYMax, trisRoofOwner);
+                AddBox(new Vector3(-halfX, 0f, 0f), borderThickness, borderD - 2f * borderThickness, foundationHeight, borderYMax, trisRoofOwner);
+                AddBox(new Vector3(halfX, 0f, 0f), borderThickness, borderD - 2f * borderThickness, foundationHeight, borderYMax, trisRoofOwner);
+
+                // Borne / panneau de propriété au centre-arrière de la parcelle
+                Vector3 signPos = new Vector3(0f, 0f, borderD * 0.18f);
+                AddBox(signPos, borderW * 0.12f, borderD * 0.12f, slabTop, slabTop + 0.22f, trisWalls);
+                AddBox(signPos, borderW * 0.42f, borderD * 0.22f, slabTop + 0.20f, slabTop + 0.30f, trisRoofOwner);
+                AddPitchedRoof(signPos, borderW * 0.46f, borderD * 0.26f, slabTop + 0.30f, slabTop + 0.40f, trisRoofOwner);
+            }
         }
         else if (buildingLevel == 1)
         {
@@ -284,7 +309,7 @@ public class ProceduralBuildingGenerator : MonoBehaviour
         SetSubmeshColor(0, groupCol);
         // Submesh 1 : Murs (Pierre claire)
         SetSubmeshColor(1, wallColor);
-        // Submesh 2 : Toiture (Couleur de l'étudiant propriétaire)
+        // Submesh 2 : Toiture / Bordure propriétaire (Couleur de l'étudiant propriétaire)
         SetSubmeshColor(2, roofCol);
     }
 

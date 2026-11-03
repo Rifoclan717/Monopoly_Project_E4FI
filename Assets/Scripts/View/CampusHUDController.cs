@@ -1,3 +1,4 @@
+using CampusTycoon;
 using UnityEngine;
 
 public class CampusHUDController : MonoBehaviour
@@ -165,10 +166,14 @@ public class CampusHUDController : MonoBehaviour
             : $"🎓 {studentNames[Mathf.Clamp(winnerId, 0, 2)]} est premier du classement…";
     }
 
-    private void ShowAISpeech(string msg)
+    /// <summary>
+    /// Affiche une bulle de réplique d'IA ou de notification en bas de l'écran.
+    /// Public pour permettre au système de répliques d'IA (Malick) de l'appeler directement.
+    /// </summary>
+    public void ShowAISpeech(string msg, float duration = 4.5f)
     {
         aiSpeechBubbleText = msg;
-        aiBubbleTimer = 4.5f;
+        aiBubbleTimer = duration;
     }
 
     // ==================== RENDU HUD IMMÉDIAT (Zéro configuration de Canvas requise) ====================
@@ -180,7 +185,7 @@ public class CampusHUDController : MonoBehaviour
         GUI.color = Color.white;
 
         // 1. Panneau Haut-Gauche : Les 3 Étudiants, Tour & Best Score
-        GUILayout.BeginArea(new Rect(15, 15, 340, 195), GUI.skin.box);
+        GUILayout.BeginArea(new Rect(15, 15, 355, 200), GUI.skin.box);
         GUILayout.Label($"🎓 CAMPUS TYCOON — Tour {currentTurnNumber} / {maxTurns}   |   🏆 Best: {bestScore}");
         GUILayout.Space(6);
         for (int i = 0; i < 3; i++)
@@ -189,7 +194,7 @@ public class CampusHUDController : MonoBehaviour
             GUILayout.Label($"{turnTag}{studentNames[i]} : {studentMoney[i]} €");
         }
         GUILayout.Space(8);
-        GUILayout.Label("Contrôles Démo : [Espace] Dés+Avancer | [A] Acheter/Bâtir\n[E] Événement Semestre | [K] Piocher Carte | [C] Colle | [T] Turbo");
+        GUILayout.Label("Contrôles Démo : [Espace] Dés+Avancer | [A] Acheter/Bâtir\n[Tab] Changer Pion (0..2) | [E] Semestre | [K] Carte | [C] Colle | [T] Turbo");
         GUILayout.EndArea();
 
         // 2. Bannière Événement du Semestre (Haut-Centre)
