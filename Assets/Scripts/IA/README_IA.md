@@ -65,11 +65,13 @@ et l'événement du semestre actif. Tout le reste est lu dans `Player`, `BoardSq
 - **Probabilités réelles 2d6** au lieu de 1/N, sur l'horizon des tours restants de chaque adversaire.
 - Les cartes qui déplacent le pion sont ignorées dans les probabilités (approximation).
 - Techos « en colle » : interprété comme « le lancer l'enverrait sur Rattrapage ».
+- Niveau 3 : le Techos remplace la règle « terrain rentable » par le score complet et garde sa réserve de 300
+  (décision d'équipe du 03/11 : 35 % → 42 % de victoires en simulation contre deux rivaux en Normal).
 - L'IA ne vend jamais volontairement (une vente fait perdre 50 % de fortune), seulement en cas de dette.
 
 ## Tests hors Unity
 
-`Tools/AISimulation` compile ces scripts avec des stubs de UnityEngine, vérifie 51 scénarios (dont le pont avec le modèle) puis simule
+`Tools/AISimulation` compile ces scripts avec des stubs de UnityEngine, vérifie 54 scénarios (dont le pont avec le modèle) puis simule
 des parties entre IA pour régler les coefficients :
 
 ```bash
