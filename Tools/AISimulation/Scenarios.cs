@@ -239,8 +239,23 @@ namespace CampusTycoon.AI.Simulation
             var hardMajor = AIDifficultyModifier.Apply(AIParameters.Defaults(CharacterId.Major), AIDifficulty.Hard);
             Check(Math.Abs(easy.BuyChance - 0.6f) < 1e-5 && easy.CashReserve == 0 && Math.Abs(easy.PowerTriggerChance - 0.5f) < 1e-5,
                 "Niveau 1 : achat -30 points, réserve 0, pouvoir une fois sur deux");
-            Check(hard.CashReserve == 450 && Math.Abs(hardMajor.BuyChance - 1f) < 1e-5 && hard.SmartPower,
+            Check(hardMajor.CashReserve == 75 && Math.Abs(hardMajor.BuyChance - 1f) < 1e-5 && hardMajor.SmartPower,
                 "Niveau 3 : réserve +50 %, achat +10 points plafonné à 100 %, pouvoir au meilleur moment");
+            Check(hard.CashReserve == 300 && !hard.BuyOnlyIfProfitable,
+                "Niveau 3, Techos : garde sa réserve de 300 et utilise le calcul complet");
+
+            // Au niveau 3, le Techos peut prendre un terrain dans un groupe entamé par un rival (pour le bloquer).
+            var g = new AIGameSnapshot(Boards.Level2(), new List<PlayerInfo>
+            {
+                new PlayerInfo { Index = 0, Character = CharacterId.Major, Money = 1000, TurnsRemaining = 12 },
+                new PlayerInfo { Index = 1, Character = CharacterId.Partygoer, Money = 1000, TurnsRemaining = 12 },
+                new PlayerInfo { Index = 2, Character = CharacterId.Techie, Money = 1000, TurnsRemaining = 12 }
+            });
+            g.Owners[16] = 0;
+            Check(Brain(2, CharacterId.Techie, AIDifficulty.Normal).DecideBuy(g, 17).Action == AIActionType.Pass,
+                "Niveau 2, Techos : refuse l'Amphi B (groupe entamé par un rival)");
+            Check(Brain(2, CharacterId.Techie, AIDifficulty.Hard).DecideBuy(g, 17).Action == AIActionType.Buy,
+                "Niveau 3, Techos : prend l'Amphi B pour bloquer le monopole du Major");
         }
     }
 }
