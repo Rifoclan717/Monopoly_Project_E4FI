@@ -29,8 +29,10 @@ de pouvoir) s'applique ensuite. L'IA ne modifie jamais l'état du jeu : la logiq
 var ai = rivalGO.AddComponent<AIController>();
 ai.Configure(player, level);          // profil optionnel en 3e argument, sinon valeurs des règles
 
-// Avant chaque décision : photo de l'état réel (Player, BoardSquare, LevelData)
-var snap = AISnapshotBuilder.Build(
+// Avant chaque décision : photo de l'état réel
+var snap = AISnapshotBuilder.Build(state);   // GameState du TurnManager
+// ou, version détaillée :
+var snap2 = AISnapshotBuilder.Build(
     level,                 // LevelData du niveau en cours
     board,                 // List<BoardSquare>, dans l'ordre du plateau
     players,               // List<Player>, dans l'ordre de leur Index
@@ -86,7 +88,7 @@ sinon le monopole n'est pas détecté.
 
 ## Tests hors Unity
 
-`Tools/AISimulation` compile ces scripts avec des stubs de UnityEngine, vérifie 73 scénarios (dont le pont avec le modèle) puis simule
+`Tools/AISimulation` compile ces scripts avec des stubs de UnityEngine, vérifie 74 scénarios (dont le pont avec le modèle) puis simule
 des parties entre IA pour régler les coefficients :
 
 ```bash

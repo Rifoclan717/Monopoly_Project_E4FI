@@ -7,11 +7,17 @@ namespace CampusTycoon.AI
     /// Pont entre l'état réel de la partie (Player, BoardSquare, LevelData) et l'IA.
     /// Construit, avant chaque décision, la photo en lecture seule que l'IA analyse.
     ///
-    /// Les deux informations que le modèle ne porte pas encore (tours joués et événement
-    /// du semestre actif) sont passées en paramètres : c'est le GameManager qui les connaît.
+    /// Deux entrées : Build(GameState) pour le TurnManager, ou la version détaillée (tests, outils).
     /// </summary>
     public static class AISnapshotBuilder
     {
+        /// <summary>Raccourci : photo de la partie à partir de l'état tenu par le TurnManager.</summary>
+        public static AIGameSnapshot Build(GameState state)
+        {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            return Build(state.Level, state.Board, state.Players, state.TurnsStarted, state.ActiveEvent, state.UpgradedThisTurn);
+        }
+
         /// <param name="level">Niveau en cours (tours max, bonus de La Rentrée, amende de colle).</param>
         /// <param name="board">Cases de la partie, dans l'ordre du plateau (board[i].Index == i).</param>
         /// <param name="players">Joueurs, dans l'ordre de leur Index (players[i].Index == i).</param>
