@@ -18,6 +18,8 @@ de pouvoir) s'applique ensuite. L'IA ne modifie jamais l'état du jeu : la logiq
 | `AIParameters.cs` | Paramètres des 3 personnages (valeurs des règles) + modulation par difficulté |
 | `AIProfile.cs` | ScriptableObject pour régler un profil dans l'Inspector |
 | `AIController.cs` | MonoBehaviour appelé par la machine à états du tour |
+| `AIBarks.cs` | Répliques des IA : textes par personnage et par moment, rythme (C# pur) |
+| `AIBarkController.cs` | Écoute `CampusEvents` et envoie les répliques à la bulle du HUD |
 | `Editor/AIProfileMenu.cs` | Menu **Campus Tycoon > IA > Créer les profils par défaut** (assets dans `Assets/Data/AI`) |
 
 ## Branchement dans la machine à états du tour
@@ -57,6 +59,19 @@ et l'événement du semestre actif. Tout le reste est lu dans `Player`, `BoardSq
 | Actions facultatives | `DecideUpgrades(snap)` | liste ordonnée de `Upgrade` |
 | Dette > argent | `ChooseAssetsToSell(snap, montantManquant)` | liste ordonnée de `SellUpgrade` / `SellProperty` |
 
+## Répliques des IA
+
+1. Ajouter `AIBarkController` sur un objet de la scène.
+2. Dans l'Inspector, relier **On Speech** à `CampusHUDController.ShowAISpeech (string, float)`.
+3. En début de partie : `barks.Bind(board, rivals)` (cases pour les noms et les monopoles, `AIController` des rivaux).
+
+Moments couverts : achat, monopole, achat d'un rival, amélioration, loyer encaissé ou payé, colle, pouvoir,
+faillite (la sienne ou celle d'un rival). Délai minimal de 3 s entre deux répliques ordinaires ; colle, monopole,
+pouvoir et faillite passent toujours. Les textes sont dans `AIBarks.cs`.
+
+Le `TurnManager` doit émettre `RaisePropertyBought` **après** avoir mis à jour le propriétaire de la case,
+sinon le monopole n'est pas détecté.
+
 ## Choix de conception
 
 - **Le prix n'est pas soustrait du score d'achat.** La fortune finale compte le prix des terrains et le coût
@@ -71,7 +86,7 @@ et l'événement du semestre actif. Tout le reste est lu dans `Player`, `BoardSq
 
 ## Tests hors Unity
 
-`Tools/AISimulation` compile ces scripts avec des stubs de UnityEngine, vérifie 54 scénarios (dont le pont avec le modèle) puis simule
+`Tools/AISimulation` compile ces scripts avec des stubs de UnityEngine, vérifie 73 scénarios (dont le pont avec le modèle) puis simule
 des parties entre IA pour régler les coefficients :
 
 ```bash

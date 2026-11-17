@@ -75,14 +75,14 @@ namespace CampusTycoon.AI.Simulation
             else { failed++; Console.WriteLine("  [ECHEC] " + label + (detail.Length > 0 ? "  -> " + detail : "")); }
         }
 
-        private static void Set(object target, string field, object value)
+        internal static void Set(object target, string field, object value)
         {
             var f = target.GetType().GetField(field, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
                     ?? throw new InvalidOperationException($"Champ {field} introuvable dans {target.GetType().Name}");
             f.SetValue(target, value);
         }
 
-        private static LevelData MakeLevel(out List<SquareData> squares)
+        internal static LevelData MakeLevel(out List<SquareData> squares)
         {
             squares = new List<SquareData>();
             foreach (var info in Boards.Level2())
@@ -105,7 +105,7 @@ namespace CampusTycoon.AI.Simulation
             return level;
         }
 
-        private static CharacterData MakeCharacter(CharacterId id, PowerType power)
+        internal static CharacterData MakeCharacter(CharacterId id, PowerType power)
         {
             var c = UnityEngine.ScriptableObject.CreateInstance<CharacterData>();
             Set(c, "id", id);
