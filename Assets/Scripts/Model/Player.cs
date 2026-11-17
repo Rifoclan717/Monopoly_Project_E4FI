@@ -55,7 +55,7 @@ namespace CampusTycoon
         {
             int oldAmount = Money;
             Money = newAmount;
-            GameEvents.RaiseMoneyChanged(Index, oldAmount, newAmount);
+            CampusEvents.RaiseMoneyChanged(Index, newAmount, newAmount - oldAmount);
         }
 
         // Position
@@ -72,19 +72,19 @@ namespace CampusTycoon
         {
             if (InDetention == value) return;
             InDetention = value;
-            GameEvents.RaiseDetentionChanged(Index, value);
+            CampusEvents.RaiseDetentionChanged(Index, value);
         }
 
-        // Pouvoir (une fois par partie)
+        // Pouvoir
 
         public void UsePower()
         {
             if (!CanUsePower) throw new InvalidOperationException($"Le joueur {Index} ne peut plus utiliser son pouvoir.");
             PowerUsed = true;
-            GameEvents.RaisePowerUsed(Index, Character.Power);
+            CampusEvents.RaisePowerUsed(Index, Character.DisplayName, Character.PowerName, Character.PowerDescription);
         }
 
-        // Effets de cartes 
+        // Effets des cartes 
 
         public void GiveExemptionTicket() => HasExemptionTicket = true;
 
@@ -100,12 +100,12 @@ namespace CampusTycoon
 
         //  Scénario Fin de jeu 
 
-        /// <summary>Élimine le joueur</summary>
+        /// <summary>Élimine le joueur. creditorIndex = joueur créancier ou CampusEvents.BankIndex.</summary>
         public void DeclareBankrupt(int creditorIndex)
         {
             if (IsBankrupt) return;
             IsBankrupt = true;
-            GameEvents.RaisePlayerBankrupt(Index, creditorIndex);
+            CampusEvents.RaisePlayerBankrupt(Index, creditorIndex);
         }
     }
 }
