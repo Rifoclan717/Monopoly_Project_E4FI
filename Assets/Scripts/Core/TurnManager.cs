@@ -198,8 +198,9 @@ namespace CampusTycoon
                 case SquareType.EventCard:
                     yield return DrawAndApplyCard(player);
                     break;
+                
                 case SquareType.Roulette:
-                    // Roulette du BDE
+                    yield return PlayRoulette(player, square);
                     break;
             }
         }
@@ -320,6 +321,39 @@ namespace CampusTycoon
             target.Upgrade();
             CampusEvents.RaisePropertyUpgraded(player.Index, target.Index, target.UpgradeLevel);
             RefreshVisual(target);
+        }
+
+        private static readonly int[] roulettePayouts = { 0, 0, 100, 100, 200, 200 };
+
+        private IEnumerator PlayRoulette(Player player, BoardSquare square)
+        {
+            int stake = square.Data.Amount;
+            if (!player.CanAfford(stake)) yield break;
+
+            bool play = false;
+            if (player.IsHuman)
+            {
+                yield return AskYesNo($"Roulette du BDE : miser {stake} ? O = oui, N = non", answer => play = answer);
+            }
+            else
+            {
+                AIDecision decision = ai[player.Index].DecideRoulette(Snapshot(), square.Index);
+                play = decision.Action == AIActionType.PlayRoulette;
+                yield return new WaitForSeconds(aiPause);
+            }
+            if (!play) yield break;
+
+            player.RemoveMoney(stake);
+            int die = Random.Range(1, 7);
+            if (dice != null)
+            {
+                bool rolled = false;
+                dice.RollDice(die, 1, (a, b) => rolled = true, true); 
+                yield return WaitWithTimeout(() => rolled, 5f);
+            }
+            int payout = roulettePayouts[die - 1];
+            player.AddMoney(payout);
+            Debug.Log($"[Roulette] {player.Character.DisplayName} mise {stake}, dé : {die}, gain {payout} (net {payout - stake:+0;-0;0}).");
         }
 
         private void PayRent(Player tenant, BoardSquare square)
