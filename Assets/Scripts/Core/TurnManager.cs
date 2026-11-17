@@ -40,6 +40,7 @@ namespace CampusTycoon
         private GlobalEventData activeEvent;
         private int activeEventRoundsLeft;
         private int lastDiceTotal;
+        private readonly List<CardData> deck = new List<CardData>();
 
         private void Start()
         {
@@ -122,6 +123,7 @@ namespace CampusTycoon
                 if (player.IsHuman) yield return WaitForSpace("Espace : lancer les dés");
                 int d1 = Random.Range(1, 7);
                 int d2 = Random.Range(1, 7);
+                
                 yield return AnimateDice(d1, d2);
                 CampusEvents.RaiseDiceRolled(player.Index, d1, d2);
                 lastDiceTotal = d1 + d2;
@@ -194,7 +196,7 @@ namespace CampusTycoon
                     yield return SendToDetention(player);
                     break;
                 case SquareType.EventCard:
-                    // Piocher une carte Événement
+                    yield return DrawAndApplyCard(player);
                     break;
                 case SquareType.Roulette:
                     // Roulette du BDE
@@ -224,6 +226,100 @@ namespace CampusTycoon
             square.SetOwner(player.Index);
             CampusEvents.RaisePropertyBought(player.Index, square.Index, price);
             RefreshVisual(square);
+        }
+
+        private CardData DrawCard()
+        {
+            if (deck.Count == 0) deck.AddRange(level.CardDeck); // paquet épuisé : on le reconstitue
+            int i = Random.Range(0, deck.Count);
+            CardData card = deck[i];
+            deck.RemoveAt(i);
+            return card;
+        }
+
+        private IEnumerator DrawAndApplyCard(Player player)
+        {
+            CardData card = DrawCard();
+            int cardId = level.CardDeck.ToList().IndexOf(card);
+            Debug.Log($"[Carte] {player.Character.DisplayName} : {card.Title} — {card.Description}");
+            CampusEvents.RaiseCardDrawn(player.Index, cardId, card.Title, card.Description);
+            yield return new WaitForSeconds(player.IsHuman ? 1.5f : aiPause);
+
+            switch (card.Effect)
+            {
+                case CardEffect.GainMoney:
+                    player.AddMoney(card.Amount);
+                    break;
+
+                case CardEffect.PayMoney:
+                    Pay(player, card.Amount, GameState.BankIndex);
+                    break;
+
+                case CardEffect.MoveSteps:
+                    yield return MoveBy(player, card.Amount);
+                    yield return Resolve(player);
+                    break;
+
+                case CardEffect.MoveToStart:
+                    // Avance jusqu'à la case 0 : passer par là donne le bonus (150).
+                    yield return MoveBy(player, State.SquareCount - player.Position);
+                    break;
+
+                case CardEffect.GoToDetention:
+                    yield return SendToDetention(player);
+                    break;
+
+                case CardEffect.CollectFromEachRival:
+                    foreach (Player rival in State.ActivePlayers.ToList())
+                        if (rival.Index != player.Index) Pay(rival, card.Amount, player.Index);
+                    break;
+
+                case CardEffect.SkipNextTurn:
+                    player.SetSkipNextTurn(true);
+                    break;
+
+                case CardEffect.RerollAndMove:
+                    int d1 = Random.Range(1, 7);
+                    int d2 = Random.Range(1, 7);
+                    yield return AnimateDice(d1, d2);
+                    CampusEvents.RaiseDiceRolled(player.Index, d1, d2);
+                    lastDiceTotal = d1 + d2;
+                    yield return MoveBy(player, lastDiceTotal);
+                    yield return Resolve(player);
+                    break;
+
+                case CardEffect.FreeUpgrade:
+                    ApplyFreeUpgrade(player, card.Amount);
+                    break;
+
+                case CardEffect.ExemptionTicket:
+                    player.GiveExemptionTicket();
+                    break;
+            }
+        }
+
+        /// <summary>Création étage gratuit sur un terrain en monopole, sinon le joueur reçoit fallbackMoney.</summary>
+        private void ApplyFreeUpgrade(Player player, int fallbackMoney)
+        {
+            List<BoardSquare> candidates = State.OwnedBy(player.Index)
+                .Where(s => s.CanBeUpgraded && State.HasMonopoly(player.Index, s.Data.Group)).ToList();
+
+            BoardSquare target = null;
+            if (candidates.Count > 0)
+            {
+                if (player.IsHuman)
+                    target = candidates.OrderByDescending(s => s.Data.UpgradeCost).First();
+                else
+                {
+                    int chosen = ai[player.Index].ChooseFreeUpgrade(Snapshot());
+                    target = candidates.FirstOrDefault(s => s.Index == chosen) ?? candidates[0];
+                }
+            }
+
+            if (target == null) { player.AddMoney(fallbackMoney); return; }
+            target.Upgrade();
+            CampusEvents.RaisePropertyUpgraded(player.Index, target.Index, target.UpgradeLevel);
+            RefreshVisual(target);
         }
 
         private void PayRent(Player tenant, BoardSquare square)
