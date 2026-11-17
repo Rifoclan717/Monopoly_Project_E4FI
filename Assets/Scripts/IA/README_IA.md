@@ -88,7 +88,7 @@ sinon le monopole n'est pas détecté.
 
 ## Tests hors Unity
 
-`Tools/AISimulation` compile ces scripts avec des stubs de UnityEngine, vérifie 74 scénarios (dont le pont avec le modèle) puis simule
+`Tools/AISimulation` compile ces scripts avec des stubs de UnityEngine, vérifie 77 scénarios (dont le pont avec le modèle) puis simule
 des parties entre IA pour régler les coefficients :
 
 ```bash

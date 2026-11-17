@@ -26,6 +26,7 @@ namespace CampusTycoon.AI.Simulation
             DetentionChoice();
             PowersFollowRules();
             DifficultyModifiers();
+            Roulette();
 
             Console.WriteLine($"--> {passed} réussis, {failed} échoués\n");
             return failed == 0;
@@ -230,6 +231,26 @@ namespace CampusTycoon.AI.Simulation
             g.Player(0).PowerUsed = true;
             Check(major.DecidePower(g, new PowerContext { Moment = PowerMoment.CollectingRent, Amount = 500 }).Action == AIActionType.KeepPower,
                 "Pouvoir utilisable une seule fois");
+        }
+
+        private static void Roulette()
+        {
+            Check(Math.Abs(UtilityScorer.RouletteExpectedGain(50) - 50) < 1e-9,
+                "Roulette : barème de l'équipe (0, 0, 100, 100, 200, 200), gain moyen +50 pour une mise de 50");
+
+            var players = new List<PlayerInfo>();
+            for (int i = 0; i < 3; i++)
+                players.Add(new PlayerInfo { Index = i, Character = (CharacterId)i, Money = 1000, TurnsRemaining = 10 });
+            var squares = Boards.Level2();
+            squares.Add(new SquareInfo("Roulette du BDE", SquareType.Roulette, amount: 50));
+            var g = new AIGameSnapshot(squares, players);
+            int roulette = squares.Count - 1;
+
+            var d = Brain(2, CharacterId.Techie).DecideRoulette(g, roulette);
+            Check(d.Action == AIActionType.PlayRoulette && d.Reason.Contains("+50"), "Techos : joue à la Roulette quand sa réserve le permet", d.ToString());
+            g.Player(2).Money = 320;
+            d = Brain(2, CharacterId.Techie).DecideRoulette(g, roulette);
+            Check(d.Action == AIActionType.SkipRoulette, "Techos : ne mise pas s'il passe sous sa réserve de 300", d.ToString());
         }
 
         private static void DifficultyModifiers()

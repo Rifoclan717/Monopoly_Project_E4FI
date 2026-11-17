@@ -19,8 +19,20 @@ namespace CampusTycoon.AI
         public const double EventCardValue = 25;
         /// <summary>Coût estimé d'un envoi en colle : un tour perdu ou 50 payés.</summary>
         public const double GoToDetentionCost = 40;
-        /// <summary>Gain net moyen de la Roulette du BDE pour une mise de 50 : (0+0+50+50+150+250)/6 - 50.</summary>
-        public const double RouletteExpectedGain = 500.0 / 6.0 - 50.0;
+        /// <summary>
+        /// Barème de la Roulette du BDE : somme reçue selon le dé (1 à 6), la mise étant déjà payée.
+        /// Doit rester identique à TurnManager.roulettePayouts. Barème choisi par l'équipe le 17/11
+        /// (plus généreux que le premier document de règles) : 1–2 : 0 ; 3–4 : 100 ; 5–6 : 200.
+        /// </summary>
+        public static readonly int[] RoulettePayouts = { 0, 0, 100, 100, 200, 200 };
+
+        /// <summary>Gain net moyen d'une partie de Roulette pour une mise donnée (+50 pour une mise de 50).</summary>
+        public static double RouletteExpectedGain(int stake)
+        {
+            double total = 0;
+            foreach (int payout in RoulettePayouts) total += payout;
+            return total / RoulettePayouts.Length - stake;
+        }
 
         // ------------------------------------------------------------------
         // Liquidité
@@ -201,7 +213,7 @@ namespace CampusTycoon.AI
                 case SquareType.EventCard: return EventCardValue;
                 case SquareType.GoToDetention: return -GoToDetentionCost;
                 case SquareType.Roulette:
-                    return RespectsReserve(snap, me, sq.Amount, p) ? Math.Max(0, RouletteExpectedGain) : 0;
+                    return RespectsReserve(snap, me, sq.Amount, p) ? Math.Max(0, RouletteExpectedGain(sq.Amount)) : 0;
             }
 
             if (!sq.IsOwnable) return 0;

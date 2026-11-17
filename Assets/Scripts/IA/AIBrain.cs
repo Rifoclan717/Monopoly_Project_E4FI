@@ -248,7 +248,7 @@ namespace CampusTycoon.AI
         public List<AIDecision> ChooseAssetsToSell(AIGameSnapshot snap, int amountNeeded) =>
             UtilityScorer.PlanForcedSale(snap, PlayerIndex, amountNeeded, Parameters);
 
-        /// <summary>Roulette du BDE (niveau 3) : gain net moyen +33, joué si la réserve le permet.</summary>
+        /// <summary>Roulette du BDE (niveau 3) : gain moyen calculé sur le barème (UtilityScorer.RoulettePayouts), joué si la réserve le permet.</summary>
         public AIDecision DecideRoulette(AIGameSnapshot snap, int square)
         {
             var p = Parameters;
@@ -256,11 +256,12 @@ namespace CampusTycoon.AI
             if (!UtilityScorer.RespectsReserve(snap, PlayerIndex, stake, p))
                 return new AIDecision(AIActionType.SkipRoulette, square, 0, "réserve insuffisante");
 
-            double score = UtilityScorer.RouletteExpectedGain - UtilityScorer.RiskDelta(snap, PlayerIndex, stake, p);
+            double gain = UtilityScorer.RouletteExpectedGain(stake);
+            double score = gain - UtilityScorer.RiskDelta(snap, PlayerIndex, stake, p);
             if (score <= 0) return new AIDecision(AIActionType.SkipRoulette, square, score, "trop risqué");
             if (!Roll(p.RouletteChance)) return new AIDecision(AIActionType.SkipRoulette, square, score, "pas envie de parier");
             return new AIDecision(AIActionType.PlayRoulette, square, score,
-                string.Format(CultureInfo.InvariantCulture, "gain moyen +{0:0}", UtilityScorer.RouletteExpectedGain));
+                string.Format(CultureInfo.InvariantCulture, "gain moyen +{0:0}", gain));
         }
     }
 }
