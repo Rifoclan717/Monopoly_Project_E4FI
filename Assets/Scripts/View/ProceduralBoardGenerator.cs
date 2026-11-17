@@ -113,6 +113,36 @@ public class ProceduralBoardGenerator : MonoBehaviour
     }
 
 #if UNITY_EDITOR
+    [UnityEditor.MenuItem("Campus Tycoon/Vue 3D/Installer le Plateau 3D dans la Scène")]
+    public static void SetupBoardInCurrentScene()
+    {
+        string[] oldTestObjects = { "Plane", "Cube", "Cube (1)", "ProceduralBuilding" };
+        foreach (string oldName in oldTestObjects)
+        {
+            GameObject oldObj = GameObject.Find(oldName);
+            if (oldObj != null && oldObj.transform.parent == null)
+            {
+                oldObj.SetActive(false);
+            }
+        }
+
+        ProceduralBoardGenerator board = FindFirstObjectByType<ProceduralBoardGenerator>();
+        if (board == null)
+        {
+            GameObject boardGo = new GameObject("CampusBoard_3D");
+            board = boardGo.AddComponent<ProceduralBoardGenerator>();
+            boardGo.AddComponent<MoverTester>();
+        }
+        else if (board.GetComponent<MoverTester>() == null && FindFirstObjectByType<MoverTester>() == null)
+        {
+            board.gameObject.AddComponent<MoverTester>();
+        }
+
+        board.GenerateCampusBoard(board.campusLevel);
+        board.EnsureThreeStudentPawns();
+        UnityEditor.Selection.activeGameObject = board.gameObject;
+    }
+
     void OnValidate()
     {
         if (lastBuiltLevel != campusLevel ||
