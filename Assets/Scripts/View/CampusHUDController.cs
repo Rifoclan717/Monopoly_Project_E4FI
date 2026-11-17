@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using CampusTycoon;
+using CampusTycoon.AI;
 using UnityEngine;
 
 public class CampusHUDController : MonoBehaviour
@@ -11,6 +13,9 @@ public class CampusHUDController : MonoBehaviour
     public int maxTurns = 15;
     public int bestScore = 0;
 
+    [Header("Contrôleur de Répliques IA (Auto-relié si présent)")]
+    public AIBarkController barkController;
+
     // Bannière d'événement global du semestre
     private string activeSemesterEventTitle = "";
     private string activeSemesterEventEffect = "";
@@ -19,9 +24,15 @@ public class CampusHUDController : MonoBehaviour
     private string lastCardBanner = "";
     private float cardBannerTimer = 0f;
 
-    // Bulle de réplique IA
+    // Zone 1 : Bandeau d'information HUD (achats, constructions, loyers, pouvoirs, faillites)
+    // Séparé de la bulle IA pour ne jamais effacer une réplique d'AIBarkController en cours (Tâche 8)
+    private string infoMessageText = "";
+    private float infoMessageTimer = 0f;
+
+    // Zone 2 : Bulle de réplique IA (alimentée par AIBarkController via ShowAISpeech)
     private string aiSpeechBubbleText = "";
     private float aiBubbleTimer = 0f;
+    private readonly Queue<(string text, float duration)> aiSpeechQueue = new Queue<(string text, float duration)>();
 
     // Chrono de décision humain (10 secondes max selon les règles)
     private bool decisionTimerActive = false;
@@ -46,6 +57,13 @@ public class CampusHUDController : MonoBehaviour
         CampusEvents.OnPowerUsed += HandlePowerUsed;
         CampusEvents.OnPlayerBankrupt += HandlePlayerBankrupt;
         CampusEvents.OnGameOver += HandleGameOver;
+
+        BindBarkControllerIfAvailable();
+    }
+
+    void Start()
+    {
+        BindBarkControllerIfAvailable();
     }
 
     void OnDisable()
@@ -60,12 +78,44 @@ public class CampusHUDController : MonoBehaviour
         CampusEvents.OnPowerUsed -= HandlePowerUsed;
         CampusEvents.OnPlayerBankrupt -= HandlePlayerBankrupt;
         CampusEvents.OnGameOver -= HandleGameOver;
+
+        if (barkController != null && barkController.OnSpeech != null)
+        {
+            barkController.OnSpeech.RemoveListener(ShowAISpeech);
+        }
+    }
+
+    /// <summary>
+    /// Relie automatiquement AIBarkController.OnSpeech à ShowAISpeech s'il est présent dans la scène.
+    /// </summary>
+    public void BindBarkControllerIfAvailable()
+    {
+        if (barkController == null)
+        {
+            barkController = FindFirstObjectByType<AIBarkController>();
+        }
+        if (barkController != null && barkController.OnSpeech != null)
+        {
+            barkController.OnSpeech.RemoveListener(ShowAISpeech);
+            barkController.OnSpeech.AddListener(ShowAISpeech);
+        }
     }
 
     void Update()
     {
         if (cardBannerTimer > 0f) cardBannerTimer -= Time.deltaTime;
-        if (aiBubbleTimer > 0f) aiBubbleTimer -= Time.deltaTime;
+        if (infoMessageTimer > 0f) infoMessageTimer -= Time.deltaTime;
+
+        if (aiBubbleTimer > 0f)
+        {
+            aiBubbleTimer -= Time.deltaTime;
+            if (aiBubbleTimer <= 0f && aiSpeechQueue.Count > 0)
+            {
+                var next = aiSpeechQueue.Dequeue();
+                aiSpeechBubbleText = next.text;
+                aiBubbleTimer = next.duration;
+            }
+        }
 
         if (decisionTimerActive)
         {
@@ -74,7 +124,7 @@ public class CampusHUDController : MonoBehaviour
             {
                 decisionTimeRemaining = 0f;
                 decisionTimerActive = false;
-                ShowAISpeech("Temps écoulé (10s) : décision automatique « Passer ».");
+                ShowInfoMessage("Temps écoulé (10s) : décision automatique « Passer ».");
             }
         }
     }
@@ -91,7 +141,7 @@ public class CampusHUDController : MonoBehaviour
         decisionTimerActive = false;
     }
 
-    // ==================== RÉACTIONS AUX ÉVÉNEMENTS OBSERVER ====================
+    // ==================== RÉACTIONS AUX ÉVÉNEMENTS OBSERVER (TÂCHE 8) ====================
 
     private void HandleTurnStarted(int playerId, int turn, int totalTurns)
     {
@@ -111,21 +161,18 @@ public class CampusHUDController : MonoBehaviour
     private void HandlePropertyBought(int playerId, int tileIndex, int price)
     {
         StopHumanDecisionTimer();
-        if (playerId == 1) ShowAISpeech("🔥 Fêtard du BDE : « Soirée chez moi ce soir sur cette case ! »");
-        else if (playerId == 2) ShowAISpeech("🤓 Le Techos : « Investissement rentable calculé à 100 %. »");
-        else ShowAISpeech($"✅ Terrain (Case {tileIndex}) acheté pour {price}€ !");
+        ShowInfoMessage($"✅ Terrain (Case {tileIndex}) acheté pour {price}€ !");
     }
 
     private void HandlePropertyUpgraded(int playerId, int tileIndex, int newLevel)
     {
         StopHumanDecisionTimer();
-        ShowAISpeech($"🏗️ Case {tileIndex} améliorée au Niveau {newLevel} ! (Loyers augmentés)");
-        if (playerId == 2) ShowAISpeech("🤓 Le Techos : « Tu vas regretter cet amphi… »");
+        ShowInfoMessage($"🏗️ Case {tileIndex} améliorée au Niveau {newLevel} ! (Loyers augmentés)");
     }
 
     private void HandleRentPaid(int tenantId, int ownerId, int tileIndex, int amount)
     {
-        ShowAISpeech($"💸 Loyer payé : {amount}€ ! « Merci pour le loyer ! »");
+        ShowInfoMessage($"💸 Loyer payé : {amount}€ (Case {tileIndex}) !");
     }
 
     private void HandleCardDrawn(int playerId, int cardId, string title, string effect)
@@ -142,13 +189,13 @@ public class CampusHUDController : MonoBehaviour
 
     private void HandlePowerUsed(int playerId, string charName, string powerName, string desc)
     {
-        ShowAISpeech($"⚡ POUVOIR [{charName}] — {powerName} : {desc}");
+        ShowInfoMessage($"⚡ POUVOIR [{charName}] — {powerName} : {desc}");
     }
 
     private void HandlePlayerBankrupt(int playerId, int creditorId)
     {
         StopHumanDecisionTimer();
-        ShowAISpeech($"💀 {studentNames[Mathf.Clamp(playerId, 0, 2)]} est éliminé (Faillite) !");
+        ShowInfoMessage($"💀 {studentNames[Mathf.Clamp(playerId, 0, 2)]} est éliminé (Faillite) !");
     }
 
     private void HandleGameOver(int winnerId, int finalScore, bool isHumanVictory)
@@ -167,11 +214,29 @@ public class CampusHUDController : MonoBehaviour
     }
 
     /// <summary>
-    /// Affiche une bulle de réplique d'IA ou de notification en bas de l'écran.
-    /// Public pour permettre au système de répliques d'IA (Malick) de l'appeler directement.
+    /// Affiche un message d'information système du HUD (achat, amélioration, loyer, pouvoir, faillite)
+    /// dans son propre bandeau, sans écraser la bulle de réplique d'IA en cours.
+    /// </summary>
+    public void ShowInfoMessage(string msg, float duration = 3.5f)
+    {
+        infoMessageText = msg;
+        infoMessageTimer = duration;
+    }
+
+    /// <summary>
+    /// Affiche une bulle de réplique d'IA en bas de l'écran (appelée par AIBarkController.OnSpeech).
+    /// Si une réplique est déjà affichée, la nouvelle est mise en file d'attente pour ne rien couper.
     /// </summary>
     public void ShowAISpeech(string msg, float duration = 4.5f)
     {
+        if (string.IsNullOrEmpty(msg)) return;
+
+        if (aiBubbleTimer > 0.25f && aiSpeechBubbleText != msg)
+        {
+            aiSpeechQueue.Enqueue((msg, duration));
+            return;
+        }
+
         aiSpeechBubbleText = msg;
         aiBubbleTimer = duration;
     }
@@ -180,7 +245,6 @@ public class CampusHUDController : MonoBehaviour
 
     void OnGUI()
     {
-        GUIStyle boxStyle = new GUIStyle(GUI.skin.box) { fontSize = 13, alignment = TextAnchor.UpperLeft };
         GUIStyle bannerStyle = new GUIStyle(GUI.skin.box) { fontSize = 15, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
         GUI.color = Color.white;
 
@@ -210,7 +274,7 @@ public class CampusHUDController : MonoBehaviour
         if (decisionTimerActive)
         {
             GUI.backgroundColor = new Color(0.2f, 0.65f, 0.95f);
-            GUI.Box(new Rect(Screen.width * 0.5f - 230, Screen.height - 115, 460, 45),
+            GUI.Box(new Rect(Screen.width * 0.5f - 230, Screen.height - 155, 460, 42),
                 $"⏱️ {decisionPrompt} — Temps restant : {decisionTimeRemaining:0.0}s (Appuie sur [A])", bannerStyle);
             GUI.backgroundColor = Color.white;
         }
@@ -223,11 +287,19 @@ public class CampusHUDController : MonoBehaviour
             GUI.backgroundColor = Color.white;
         }
 
-        // 5. Bulle de Réplique IA / Notification Action
+        // 5a. Zone Information HUD (Actions du jeu : achat, construction, loyer, pouvoir)
+        if (infoMessageTimer > 0f)
+        {
+            GUI.backgroundColor = new Color(0.22f, 0.32f, 0.48f);
+            GUI.Box(new Rect(Screen.width * 0.5f - 260, Screen.height - 104, 520, 36), infoMessageText, bannerStyle);
+            GUI.backgroundColor = Color.white;
+        }
+
+        // 5b. Zone Bulle de Réplique IA (Alimentée par AIBarkController via ShowAISpeech)
         if (aiBubbleTimer > 0f)
         {
             GUI.backgroundColor = new Color(0.15f, 0.85f, 0.55f);
-            GUI.Box(new Rect(Screen.width * 0.5f - 260, Screen.height - 60, 520, 38), aiSpeechBubbleText, bannerStyle);
+            GUI.Box(new Rect(Screen.width * 0.5f - 260, Screen.height - 58, 520, 40), $"💬 {aiSpeechBubbleText}", bannerStyle);
             GUI.backgroundColor = Color.white;
         }
 
