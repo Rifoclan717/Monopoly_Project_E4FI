@@ -1,4 +1,5 @@
 using UnityEngine;
+using CampusTycoon.AI;
 
 namespace CampusTycoon
 {
@@ -18,6 +19,10 @@ namespace CampusTycoon
         [SerializeField] private string powerName;
         [TextArea(2, 4)] [SerializeField] private string powerDescription;
 
+        [Header("IA (quand ce personnage est un rival)")]
+        [Tooltip("Profil de Assets/Data/AI. Vide = valeurs par défaut du personnage.")]
+        [SerializeField] private AIProfile aiProfile;
+
         public CharacterId Id => id;
         public string DisplayName => displayName;
         public string Description => description;
@@ -26,5 +31,6 @@ namespace CampusTycoon
         public PowerType Power => power;
         public string PowerName => powerName;
         public string PowerDescription => powerDescription;
+        public AIProfile AIProfile => aiProfile;
     }
 }

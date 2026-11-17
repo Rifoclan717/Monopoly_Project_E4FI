@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0ce2d4c240d79da47ba46dc7f8b448db, type: 3}
+  m_Name: CHAR_Fetard
+  m_EditorClassIdentifier: Assembly-CSharp::CampusTycoon.CharacterData
+  id: 1
+  displayName: "Le F\xEAtard du BDE"
+  description: "Impr\xE9visible, il d\xE9pense sans compter."
+  portrait: {fileID: 0}
+  tokenColor: {r: 0.47843137, g: 0.3019608, b: 0.8784314, a: 1}
+  power: 1
+  powerName: "Soir\xE9e m\xE9morable"
+  powerDescription: "Annule un loyer ou une taxe \xE0 payer."
+  aiProfile: {fileID: 11400000, guid: f5f2f895a4c394d4bbdc5ba12923464d, type: 2}

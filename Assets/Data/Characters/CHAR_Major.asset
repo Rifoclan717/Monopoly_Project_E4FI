@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0ce2d4c240d79da47ba46dc7f8b448db, type: 3}
+  m_Name: CHAR_Major
+  m_EditorClassIdentifier: Assembly-CSharp::CampusTycoon.CharacterData
+  id: 0
+  displayName: Le Major de promo
+  description: "Ambitieux, il ach\xE8te tout et construit vite."
+  portrait: {fileID: 0}
+  tokenColor: {r: 0.7882353, g: 0.23529412, b: 0.23529412, a: 1}
+  power: 0
+  powerName: "Dossier b\xE9ton"
+  powerDescription: Double un loyer qu'un rival doit vous payer.
+  aiProfile: {fileID: 11400000, guid: 8e1c12f84cb49e641a8aa15e4aa8d5d1, type: 2}
