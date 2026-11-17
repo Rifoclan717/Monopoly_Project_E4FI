@@ -126,7 +126,22 @@ namespace CampusTycoon
                 
                 yield return AnimateDice(d1, d2);
                 CampusEvents.RaiseDiceRolled(player.Index, d1, d2);
+                
                 lastDiceTotal = d1 + d2;
+
+                // Techos, relance, après le lancer et avant le déplacement
+                bool rerolled = false;
+                yield return OfferPower(player, PowerType.Reroll,
+                    new PowerContext { Moment = PowerMoment.DiceRolled, FromPosition = player.Position, DiceTotal = lastDiceTotal },
+                    $"Relance : relancer les dés (vous avez fait {lastDiceTotal}) ? O = oui, N = non", r => rerolled = r);
+                if (rerolled)
+                {
+                    d1 = Random.Range(1, 7);
+                    d2 = Random.Range(1, 7);
+                    yield return AnimateDice(d1, d2);
+                    CampusEvents.RaiseDiceRolled(player.Index, d1, d2);
+                    lastDiceTotal = d1 + d2;
+                }
 
                 Phase = TurnPhase.Move;
                 yield return MoveBy(player, lastDiceTotal);
@@ -184,10 +199,10 @@ namespace CampusTycoon
                 case SquareType.Station:
                 case SquareType.Utility:
                     if (!square.IsOwned) yield return OfferPurchase(player, square);
-                    else if (square.OwnerIndex != player.Index) PayRent(player, square);
+                    else if (square.OwnerIndex != player.Index) yield return PayRent(player, square);
                     break;
                 case SquareType.Tax:
-                    Pay(player, square.Data.Amount, GameState.BankIndex);
+                    yield return PayTax(player, square.Data.Amount);
                     break;
                 case SquareType.StudentLounge:
                     player.AddMoney(square.Data.Amount);
@@ -356,16 +371,80 @@ namespace CampusTycoon
             Debug.Log($"[Roulette] {player.Character.DisplayName} mise {stake}, dé : {die}, gain {payout} (net {payout - stake:+0;-0;0}).");
         }
 
-        private void PayRent(Player tenant, BoardSquare square)
+        private IEnumerator OfferPower(Player player, PowerType expected, PowerContext context,
+            string humanPrompt, System.Action<bool> result)
         {
-            int rent = RentCalculator.Rent(State, square, lastDiceTotal);
-            if (rent <= 0) return;
-            int owner = square.OwnerIndex;
-            Pay(tenant, rent, owner);
-            CampusEvents.RaiseRentPaid(tenant.Index, owner, square.Index, rent);
+            result(false);
+            if (!player.CanUsePower || player.Character.Power != expected) yield break;
+
+            bool use = false;
+            if (player.IsHuman)
+            {
+                yield return AskYesNo(humanPrompt, answer => use = answer);
+            }
+            else
+            {
+                use = ai[player.Index].DecidePower(Snapshot(), context).Action == AIActionType.UsePower;
+                yield return new WaitForSeconds(aiPause);
+            }
+            if (!use) yield break;
+
+            player.UsePower(); // lève OnPowerUsed : le HUD affiche le pouvoir
+            result(true);
         }
 
-        // Argent, ventes et faillite
+        private IEnumerator PayTax(Player player, int amount)
+        {
+            bool used = false;
+            yield return OfferPower(player, PowerType.CancelPayment,
+                new PowerContext { Moment = PowerMoment.PayingTax, Amount = amount },
+                $"Soirée mémorable : annuler la taxe de {amount} ? O = oui, N = non", r => used = r);
+            if (used) yield break;
+            Pay(player, amount, GameState.BankIndex);
+        }
+
+        private IEnumerator PayRent(Player tenant, BoardSquare square)
+        {
+            int rent = RentCalculator.Rent(State, square, lastDiceTotal);
+            if (rent <= 0) yield break;
+            Player owner = State.Players[square.OwnerIndex];
+
+            // 1. Major : Dossier béton double le loyer.
+            bool used = false;
+            yield return OfferPower(owner, PowerType.DoubleRent,
+                new PowerContext { Moment = PowerMoment.CollectingRent, Amount = rent },
+                $"Dossier béton : doubler le loyer de {rent} ? O = oui, N = non", r => used = r);
+            if (used) rent *= 2;
+
+            // Absence du locataire : annule le loyer.
+            if (tenant.HasExemptionTicket)
+            {
+                bool useTicket = false;
+                if (tenant.IsHuman)
+                    yield return AskYesNo($"Billet d'absence : annuler le loyer de {rent} ? O = oui, N = non", a => useTicket = a);
+                else
+                    useTicket = ai[tenant.Index].ShouldUseTicketOnRent(Snapshot(), rent);
+
+                if (useTicket && tenant.ConsumeExemptionTicket())
+                {
+                    Debug.Log($"[Loyer] {tenant.Character.DisplayName} annule {rent} avec un billet d'absence.");
+                    yield break;
+                }
+            }
+
+            // Fêtard : Soirée mémorable annule le loyer
+            used = false;
+            yield return OfferPower(tenant, PowerType.CancelPayment,
+                new PowerContext { Moment = PowerMoment.PayingRent, Amount = rent },
+                $"Soirée mémorable : annuler le loyer de {rent} ? O = oui, N = non", r => used = r);
+            if (used) yield break;
+
+            Pay(tenant, rent, owner.Index);
+            CampusEvents.RaiseRentPaid(tenant.Index, owner.Index, square.Index, rent);
+            Debug.Log($"[Loyer] {tenant.Character.DisplayName} paie {rent} à {owner.Character.DisplayName} ({square.Data.DisplayName}).");
+        }
+
+        Argent, ventes et faillite
 
         /// <summary>creditor = index du joueur payé, ou GameState.BankIndex. Vend des biens si l'argent manque.</summary>
         private void Pay(Player payer, int amount, int creditor)
