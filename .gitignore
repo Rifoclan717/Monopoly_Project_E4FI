@@ -51,6 +51,8 @@ ExportedObj/
 *.csproj
 *.unityproj
 *.sln
+*.slnx
+.vsconfig
 *.suo
 *.tmp
 *.user

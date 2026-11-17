@@ -1,4 +1,5 @@
 using CampusTycoon;
+using CampusTycoon.AI;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -9,6 +10,7 @@ public class MoverTester : MonoBehaviour
     public ProceduralBoardGenerator board;
     public ProceduralDiceRoller diceRoller;
     public CampusHUDController hud;
+    public AIBarkController barkController;
 
     [Header("Joueur Actif en Test (0 = Bleu, 1 = Rouge IA1, 2 = Vert IA2)")]
     [Range(0, 2)] public int activeStudentId = 0;
@@ -50,6 +52,9 @@ public class MoverTester : MonoBehaviour
             }
         }
 
+        // Configure les 2 rivaux IA et le AIBarkController pour tester les vraies répliques d'IA (Tâche 8)
+        SetupDemoAIBarks();
+
         if (hud == null)
         {
             hud = FindFirstObjectByType<CampusHUDController>();
@@ -59,7 +64,42 @@ public class MoverTester : MonoBehaviour
             }
         }
 
+        if (hud != null)
+        {
+            hud.barkController = barkController;
+            hud.BindBarkControllerIfAvailable();
+        }
+
         CampusEvents.RaiseTurnStarted(activeStudentId, currentTurn, 15);
+    }
+
+    private void SetupDemoAIBarks()
+    {
+        if (board != null)
+        {
+            PawnSplineMover p1 = board.GetStudentPawn(1);
+            if (p1 != null && p1.GetComponent<AIController>() == null)
+            {
+                AIController ai1 = p1.gameObject.AddComponent<AIController>();
+                ai1.Configure(1, CharacterId.Partygoer, AIDifficulty.Normal);
+            }
+
+            PawnSplineMover p2 = board.GetStudentPawn(2);
+            if (p2 != null && p2.GetComponent<AIController>() == null)
+            {
+                AIController ai2 = p2.gameObject.AddComponent<AIController>();
+                ai2.Configure(2, CharacterId.Techie, AIDifficulty.Normal);
+            }
+        }
+
+        if (barkController == null)
+        {
+            barkController = FindFirstObjectByType<AIBarkController>();
+            if (barkController == null)
+            {
+                barkController = gameObject.AddComponent<AIBarkController>();
+            }
+        }
     }
 
     void Update()
@@ -192,6 +232,7 @@ public class MoverTester : MonoBehaviour
         {
             int colleIdx = GetColleTileIndex();
             pawn.SendDirectlyToColle(board, colleIdx);
+            CampusEvents.RaisePlayerMoved(playerId, colleIdx, 0, true);
             return;
         }
 
@@ -199,9 +240,22 @@ public class MoverTester : MonoBehaviour
         {
             TriggerRandomCampusCard(playerId);
         }
-        else if (tile.category == ProceduralTileView.TileCategory.Property && hud != null)
+        else if (tile.category == ProceduralTileView.TileCategory.Property)
         {
-            hud.StartHumanDecisionTimer($"Case {tile.tileName} ({tile.price}€) : Acheter / Améliorer ?");
+            int owner = tileOwner[tileIndex];
+            if (owner != -1 && owner != playerId)
+            {
+                int rent = Mathf.Max(10, tile.price / 5);
+                studentMoney[playerId] -= rent;
+                studentMoney[owner] += rent;
+                CampusEvents.RaiseMoneyChanged(playerId, studentMoney[playerId], -rent);
+                CampusEvents.RaiseMoneyChanged(owner, studentMoney[owner], rent);
+                CampusEvents.RaiseRentPaid(playerId, owner, tileIndex, rent);
+            }
+            else if (hud != null)
+            {
+                hud.StartHumanDecisionTimer($"Case {tile.tileName} ({tile.price}€) : Acheter / Améliorer ?");
+            }
         }
     }
 
