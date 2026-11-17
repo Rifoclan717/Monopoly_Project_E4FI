@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e85c963229b16947ae0e7ed985610bd, type: 3}
+  m_Name: GEV_PortesOuvertes
+  m_EditorClassIdentifier: Assembly-CSharp::CampusTycoon.GlobalEventData
+  type: 0
+  title: "Journ\xE9e portes ouvertes"
+  description: "Tous les loyers de terrains sont doubl\xE9s."
+  durationRounds: 1
+  amount: 0

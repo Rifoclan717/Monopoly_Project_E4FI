@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0ce2d4c240d79da47ba46dc7f8b448db, type: 3}
+  m_Name: CHAR_Techos
+  m_EditorClassIdentifier: Assembly-CSharp::CampusTycoon.CharacterData
+  id: 2
+  displayName: Le Techos
+  description: Calculateur, il n'investit que dans ce qui rapporte.
+  portrait: {fileID: 0}
+  tokenColor: {r: 0.09019608, g: 0.5019608, b: 0.37254903, a: 1}
+  power: 2
+  powerName: Relance
+  powerDescription: "Relance les d\xE9s et garde le second r\xE9sultat."
+  aiProfile: {fileID: 11400000, guid: 0606c5ce3733daf46bcf2922b9cb1719, type: 2}
