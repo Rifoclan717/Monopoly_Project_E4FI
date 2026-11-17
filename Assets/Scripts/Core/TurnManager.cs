@@ -156,7 +156,7 @@ namespace CampusTycoon
             }
 
             Phase = TurnPhase.Actions;
-            // Améliorations, pouvoir, ventes volontaires.
+            if (!player.IsBankrupt) yield return DoUpgrades(player);
 
             Phase = TurnPhase.End;
             yield return Pause(player);
@@ -444,7 +444,7 @@ namespace CampusTycoon
             Debug.Log($"[Loyer] {tenant.Character.DisplayName} paie {rent} à {owner.Character.DisplayName} ({square.Data.DisplayName}).");
         }
 
-        Argent, ventes et faillite
+        //Argent, ventes et faillite
 
         /// <summary>creditor = index du joueur payé, ou GameState.BankIndex. Vend des biens si l'argent manque.</summary>
         private void Pay(Player payer, int amount, int creditor)
@@ -487,6 +487,52 @@ namespace CampusTycoon
                 if (property == null) return; // plus rien à vendre
                 SellProperty(player, property);
             }
+        }
+
+        private int UpgradeCostOf(BoardSquare square) =>
+            State.ActiveEvent == GlobalEventType.BackToSchoolSale ? square.Data.UpgradeCost / 2 : square.Data.UpgradeCost;
+
+        private bool CanUpgrade(Player player, BoardSquare square) =>
+            square.OwnerIndex == player.Index
+            && square.CanBeUpgraded
+            && State.HasMonopoly(player.Index, square.Data.Group)
+            && !State.UpgradedThisTurn.Contains(square.Index)
+            && player.CanAfford(UpgradeCostOf(square));
+
+        private IEnumerator DoUpgrades(Player player)
+        {
+            if (player.IsHuman)
+            {
+                foreach (BoardSquare square in State.OwnedBy(player.Index).ToList())
+                {
+                    if (!CanUpgrade(player, square)) continue;
+                    bool yes = false;
+                    yield return AskYesNo(
+                        $"Améliorer {square.Data.DisplayName} (niveau {square.UpgradeLevel} → {square.UpgradeLevel + 1}) pour {UpgradeCostOf(square)} ? O = oui, N = non",
+                        answer => yes = answer);
+                    if (yes) ApplyUpgrade(player, square);
+                }
+                yield break;
+            }
+
+            foreach (AIDecision decision in ai[player.Index].DecideUpgrades(Snapshot()))
+            {
+                if (decision.Action != AIActionType.Upgrade) continue;
+                BoardSquare square = State.Board[decision.Square];
+                if (!CanUpgrade(player, square)) continue;
+                ApplyUpgrade(player, square);
+                yield return new WaitForSeconds(aiPause);
+            }
+        }
+
+        private void ApplyUpgrade(Player player, BoardSquare square)
+        {
+            player.RemoveMoney(UpgradeCostOf(square));
+            square.Upgrade();
+            State.UpgradedThisTurn.Add(square.Index);
+            CampusEvents.RaisePropertyUpgraded(player.Index, square.Index, square.UpgradeLevel);
+            RefreshVisual(square);
+            Debug.Log($"[Amélioration] {player.Character.DisplayName} : {square.Data.DisplayName} niveau {square.UpgradeLevel}.");
         }
 
         private void SellUpgrade(Player player, BoardSquare square)
