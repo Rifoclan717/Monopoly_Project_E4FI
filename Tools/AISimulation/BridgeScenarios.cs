@@ -59,6 +59,23 @@ namespace CampusTycoon.AI.Simulation
             var buy = techie.DecideBuy(snap, 6);
             Check(buy.Action == AIActionType.Buy, "Techos : achète la Bibliothèque (600 - 100 >= 300)", buy.ToString());
 
+            // Raccourci Build(GameState) : même photo que la version détaillée.
+            var characters = new[] { MakeCharacter(CharacterId.Major, PowerType.DoubleRent), MakeCharacter(CharacterId.Partygoer, PowerType.CancelPayment), MakeCharacter(CharacterId.Techie, PowerType.Reroll) };
+            Set(level, "startingMoney", 1000);
+            var state = new GameState(level, characters);
+            state.Board[18].SetOwner(1); state.Board[19].SetOwner(1); state.Board[19].Upgrade();
+            state.Players[1].RemoveMoney(250);
+            state.TurnsStarted[0] = 6; state.TurnsStarted[1] = 6; state.TurnsStarted[2] = 5;
+            state.ActiveEvent = GlobalEventType.OpenDay;
+            state.UpgradedThisTurn.Add(19);
+            var fromState = AISnapshotBuilder.Build(state);
+            var detailed = AISnapshotBuilder.Build(state.Level, state.Board, state.Players, state.TurnsStarted, state.ActiveEvent, state.UpgradedThisTurn);
+            bool same = fromState.SquareCount == detailed.SquareCount && fromState.Owners[19] == 1 && fromState.Levels[19] == 1
+                        && fromState.Player(1).Money == 750 && fromState.Player(2).TurnsRemaining == 10
+                        && fromState.ActiveEvent == GlobalEventType.OpenDay && fromState.UpgradedThisTurn.Contains(19)
+                        && System.Linq.Enumerable.SequenceEqual(fromState.Owners, detailed.Owners);
+            Check(same, "Build(GameState) donne la même photo que la version détaillée");
+
             bool threw = false;
             try { AISnapshotBuilder.Build(level, board, players, new[] { 1, 1 }); } catch (ArgumentException) { threw = true; }
             Check(threw, "Erreur claire si les tours joués ne correspondent pas aux joueurs");
