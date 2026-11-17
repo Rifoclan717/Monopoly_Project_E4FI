@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using CampusTycoon;
 using CampusTycoon.AI;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class CampusHUDController : MonoBehaviour
 {
@@ -13,8 +14,21 @@ public class CampusHUDController : MonoBehaviour
     public int maxTurns = 15;
     public int bestScore = 0;
 
-    [Header("Contrôleur de Répliques IA (Auto-relié si présent)")]
+    [Header("Accélération des Animations pendant les Tours d'IA (Tâche 6)")]
+    [Tooltip("Si activé, accélère automatiquement les pions et les dés pendant les tours des rivaux IA")]
+    public bool accelerateAITurns = true;
+    [Range(1f, 5f)] public float aiTurnSpeedMultiplier = 2.2f;
+    [Tooltip("Mode Turbo global activable avec la touche [T] ou le bouton HUD")]
+    public bool turboModeActive = false;
+    [Range(2f, 8f)] public float turboSpeedMultiplier = 4f;
+
+    [Header("Références Automatiques (Trouvées si vides)")]
+    public TurnManager turnManager;
+    public ProceduralBoardGenerator board;
+    public ProceduralDiceRoller diceRoller;
     public AIBarkController barkController;
+
+    private bool initializedFromTurnManager = false;
 
     // Bannière d'événement global du semestre
     private string activeSemesterEventTitle = "";
@@ -45,7 +59,7 @@ public class CampusHUDController : MonoBehaviour
 
     void OnEnable()
     {
-        bestScore = PlayerPrefs.GetInt("BestScore_Level2", 1450);
+        bestScore = PlayerPrefs.GetInt("BestScore_Level2", 0);
 
         CampusEvents.OnTurnStarted += HandleTurnStarted;
         CampusEvents.OnMoneyChanged += HandleMoneyChanged;
@@ -63,7 +77,13 @@ public class CampusHUDController : MonoBehaviour
 
     void Start()
     {
+        if (turnManager == null) turnManager = FindFirstObjectByType<TurnManager>();
+        if (board == null) board = FindFirstObjectByType<ProceduralBoardGenerator>();
+        if (diceRoller == null) diceRoller = FindFirstObjectByType<ProceduralDiceRoller>();
+
         BindBarkControllerIfAvailable();
+        TrySyncWithTurnManager();
+        ApplyAnimationSpeedForPlayer(currentPlayerTurn);
     }
 
     void OnDisable()
@@ -86,13 +106,17 @@ public class CampusHUDController : MonoBehaviour
     }
 
     /// <summary>
-    /// Relie automatiquement AIBarkController.OnSpeech à ShowAISpeech s'il est présent dans la scène.
+    /// Relie automatiquement AIBarkController.OnSpeech à ShowAISpeech (et le crée si TurnManager est présent).
     /// </summary>
     public void BindBarkControllerIfAvailable()
     {
         if (barkController == null)
         {
             barkController = FindFirstObjectByType<AIBarkController>();
+            if (barkController == null && Application.isPlaying)
+            {
+                barkController = gameObject.AddComponent<AIBarkController>();
+            }
         }
         if (barkController != null && barkController.OnSpeech != null)
         {
@@ -101,8 +125,44 @@ public class CampusHUDController : MonoBehaviour
         }
     }
 
+    private void TrySyncWithTurnManager()
+    {
+        if (initializedFromTurnManager) return;
+        if (turnManager == null) turnManager = FindFirstObjectByType<TurnManager>();
+        if (turnManager == null || turnManager.State == null) return;
+
+        GameState state = turnManager.State;
+        if (state.Level != null)
+        {
+            maxTurns = state.Level.MaxTurns;
+            bestScore = PlayerPrefs.GetInt($"BestScore_Level{state.Level.LevelNumber}", 0);
+        }
+
+        for (int i = 0; i < state.Players.Count && i < 3; i++)
+        {
+            Player p = state.Players[i];
+            string roleTag = p.IsHuman ? "Vous" : $"IA {i}";
+            studentNames[i] = $"{roleTag} ({p.Character.DisplayName})";
+            studentMoney[i] = p.Money;
+        }
+
+        BindBarkControllerIfAvailable();
+        if (barkController != null)
+        {
+            AIController[] rivals = FindObjectsByType<AIController>(FindObjectsSortMode.None);
+            barkController.Bind(state.Board, rivals);
+        }
+
+        initializedFromTurnManager = true;
+    }
+
     void Update()
     {
+        if (!initializedFromTurnManager)
+        {
+            TrySyncWithTurnManager();
+        }
+
         if (cardBannerTimer > 0f) cardBannerTimer -= Time.deltaTime;
         if (infoMessageTimer > 0f) infoMessageTimer -= Time.deltaTime;
 
@@ -127,6 +187,38 @@ public class CampusHUDController : MonoBehaviour
                 ShowInfoMessage("Temps écoulé (10s) : décision automatique « Passer ».");
             }
         }
+
+        // Raccourci clavier [V] pour activer/désactiver le mode Turbo sans interférer avec [T] (attendre en colle)
+        if (Keyboard.current != null && Keyboard.current.vKey.wasPressedThisFrame)
+        {
+            turboModeActive = !turboModeActive;
+            ApplyAnimationSpeedForPlayer(currentPlayerTurn);
+        }
+    }
+
+    private void ApplyAnimationSpeedForPlayer(int playerId)
+    {
+        float targetSpeed = 1f;
+        if (turboModeActive)
+        {
+            targetSpeed = turboSpeedMultiplier;
+        }
+        else if (accelerateAITurns && playerId != 0)
+        {
+            targetSpeed = aiTurnSpeedMultiplier;
+        }
+
+        if (board == null) board = FindFirstObjectByType<ProceduralBoardGenerator>();
+        if (board != null)
+        {
+            board.SetAllPawnsSpeedMultiplier(targetSpeed);
+        }
+
+        if (diceRoller == null) diceRoller = FindFirstObjectByType<ProceduralDiceRoller>();
+        if (diceRoller != null)
+        {
+            diceRoller.speedMultiplier = targetSpeed;
+        }
     }
 
     public void StartHumanDecisionTimer(string promptText)
@@ -141,13 +233,15 @@ public class CampusHUDController : MonoBehaviour
         decisionTimerActive = false;
     }
 
-    // ==================== RÉACTIONS AUX ÉVÉNEMENTS OBSERVER (TÂCHE 8) ====================
+    // ==================== RÉACTIONS AUX ÉVÉNEMENTS OBSERVER (TÂCHES 6 & 8) ====================
 
     private void HandleTurnStarted(int playerId, int turn, int totalTurns)
     {
+        TrySyncWithTurnManager();
         currentPlayerTurn = Mathf.Clamp(playerId, 0, 2);
         currentTurnNumber = turn;
         maxTurns = totalTurns;
+        ApplyAnimationSpeedForPlayer(currentPlayerTurn);
     }
 
     private void HandleMoneyChanged(int playerId, int newMoney, int delta)
@@ -201,16 +295,25 @@ public class CampusHUDController : MonoBehaviour
     private void HandleGameOver(int winnerId, int finalScore, bool isHumanVictory)
     {
         isGameOver = true;
+        int levelNum = (turnManager != null && turnManager.State != null && turnManager.State.Level != null)
+            ? turnManager.State.Level.LevelNumber
+            : 2;
+        string key = $"BestScore_Level{levelNum}";
+
         if (isHumanVictory && finalScore > bestScore)
         {
             bestScore = finalScore;
-            PlayerPrefs.SetInt("BestScore_Level2", bestScore);
+            PlayerPrefs.SetInt(key, bestScore);
             PlayerPrefs.Save();
+        }
+        else
+        {
+            bestScore = Mathf.Max(bestScore, PlayerPrefs.GetInt(key, 0));
         }
 
         gameOverMessage = isHumanVictory
             ? $"🏆 Vous décrochez la bourse d'excellence ! (Score : {finalScore})"
-            : $"🎓 {studentNames[Mathf.Clamp(winnerId, 0, 2)]} est premier du classement…";
+            : $"🎓 {studentNames[Mathf.Clamp(winnerId, 0, 2)]} est premier du classement (Score : {finalScore})…";
     }
 
     /// <summary>
@@ -248,17 +351,39 @@ public class CampusHUDController : MonoBehaviour
         GUIStyle bannerStyle = new GUIStyle(GUI.skin.box) { fontSize = 15, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
         GUI.color = Color.white;
 
-        // 1. Panneau Haut-Gauche : Les 3 Étudiants, Tour & Best Score
-        GUILayout.BeginArea(new Rect(15, 15, 355, 200), GUI.skin.box);
+        // 1. Panneau Haut-Gauche : Les 3 Étudiants, Tour, Best Score & Options d'Accélération IA
+        GUILayout.BeginArea(new Rect(15, 15, 370, 235), GUI.skin.box);
         GUILayout.Label($"🎓 CAMPUS TYCOON — Tour {currentTurnNumber} / {maxTurns}   |   🏆 Best: {bestScore}");
-        GUILayout.Space(6);
+        GUILayout.Space(4);
         for (int i = 0; i < 3; i++)
         {
             string turnTag = (i == currentPlayerTurn) ? "▶ " : "   ";
             GUILayout.Label($"{turnTag}{studentNames[i]} : {studentMoney[i]} €");
         }
-        GUILayout.Space(8);
-        GUILayout.Label("Contrôles Démo : [Espace] Dés+Avancer | [A] Acheter/Bâtir\n[Tab] Changer Pion (0..2) | [E] Semestre | [K] Carte | [C] Colle | [T] Turbo");
+        GUILayout.Space(6);
+
+        // Option Tâche 6 : Accélérer les animations pendant les tours d'IA + Mode Turbo
+        GUILayout.BeginHorizontal();
+        bool newAccelAI = GUILayout.Toggle(accelerateAITurns, $" Accélérer tours IA (x{aiTurnSpeedMultiplier:0.0})");
+        bool newTurbo = GUILayout.Toggle(turboModeActive, $" Turbo [V] (x{turboSpeedMultiplier:0})");
+        GUILayout.EndHorizontal();
+
+        if (newAccelAI != accelerateAITurns || newTurbo != turboModeActive)
+        {
+            accelerateAITurns = newAccelAI;
+            turboModeActive = newTurbo;
+            ApplyAnimationSpeedForPlayer(currentPlayerTurn);
+        }
+
+        GUILayout.Space(4);
+        if (turnManager != null)
+        {
+            GUILayout.Label("Commandes Partie : [Espace] Lancer dés | [Clic] Passer anim dé\nAchat : [O] Oui / [N] Non | Colle : [P] Payer [B] Billet [T] Attendre");
+        }
+        else
+        {
+            GUILayout.Label("Contrôles Démo : [Espace] Dés+Avancer | [A] Acheter/Bâtir\n[Tab] Changer Pion (0..2) | [E] Semestre | [K] Carte | [C] Colle");
+        }
         GUILayout.EndArea();
 
         // 2. Bannière Événement du Semestre (Haut-Centre)
@@ -270,12 +395,21 @@ public class CampusHUDController : MonoBehaviour
             GUI.backgroundColor = Color.white;
         }
 
+        // 2b. Invitation au lancer de dés quand TurnManager attend [Espace] du joueur humain
+        if (turnManager != null && turnManager.Phase == TurnManager.TurnPhase.Roll && currentPlayerTurn == 0 && !decisionTimerActive)
+        {
+            GUI.backgroundColor = new Color(0.18f, 0.52f, 0.95f);
+            GUI.Box(new Rect(Screen.width * 0.5f - 230, Screen.height - 155, 460, 42),
+                "🎲 C'est votre tour ! Appuyez sur [Espace] pour lancer les dés", bannerStyle);
+            GUI.backgroundColor = Color.white;
+        }
+
         // 3. Chrono de décision humain de 10 secondes
         if (decisionTimerActive)
         {
             GUI.backgroundColor = new Color(0.2f, 0.65f, 0.95f);
-            GUI.Box(new Rect(Screen.width * 0.5f - 230, Screen.height - 155, 460, 42),
-                $"⏱️ {decisionPrompt} — Temps restant : {decisionTimeRemaining:0.0}s (Appuie sur [A])", bannerStyle);
+            GUI.Box(new Rect(Screen.width * 0.5f - 270, Screen.height - 155, 540, 42),
+                $"⏱️ {decisionPrompt} ({decisionTimeRemaining:0.0}s)", bannerStyle);
             GUI.backgroundColor = Color.white;
         }
 

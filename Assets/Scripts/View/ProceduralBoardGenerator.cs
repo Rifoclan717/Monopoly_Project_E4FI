@@ -25,11 +25,11 @@ public class ProceduralBoardGenerator : MonoBehaviour
         }
     }
 
-    [Header("Source Unique des Données (Modèle LevelData)")]
-    [Tooltip("Asset LevelData du niveau. S'il est renseigné, le plateau lit ses SquareData comme unique source.")]
+    [Header("Source Unique des Données (Modèle LevelData - Décision 2)")]
+    [Tooltip("Asset LevelData du niveau (Assets/Data/Levels/LVL_1..3). Unique source de vérité des cases.")]
     public LevelData levelData;
 
-    [Header("Configuration Campus Tycoon (Secours tant que LevelData est vide)")]
+    [Header("Configuration Campus Tycoon (Sélecteur Rapide Niveaux 1 à 3)")]
     [Tooltip("1 = Première semaine (16 cases), 2 = Mi-semestre (20 cases), 3 = Semestre en folie (24 cases)")]
     [Range(1, 3)] public int campusLevel = 2;
 
@@ -100,20 +100,21 @@ public class ProceduralBoardGenerator : MonoBehaviour
         previewBuildingLevel = 0;
         livelyCampusShowcase = false;
 
+        if (levelData == null)
+        {
+            levelData = ResolveLevelDataAsset(campusLevel);
+        }
+
         if (levelData != null && levelData.SquareCount > 0)
         {
             GenerateCampusBoard(levelData);
-        }
-        else
-        {
-            GenerateCampusBoard(campusLevel);
         }
 
         EnsureThreeStudentPawns();
     }
 
 #if UNITY_EDITOR
-    [UnityEditor.MenuItem("Campus Tycoon/Vue 3D/Installer le Plateau 3D dans la Sc�ne")]
+    [UnityEditor.MenuItem("Campus Tycoon/Vue 3D/Installer le Plateau 3D dans la Scène")]
     public static void SetupBoardInCurrentScene()
     {
         string[] oldTestObjects = { "Plane", "Cube", "Cube (1)", "ProceduralBuilding" };
@@ -133,12 +134,18 @@ public class ProceduralBoardGenerator : MonoBehaviour
             board = boardGo.AddComponent<ProceduralBoardGenerator>();
             boardGo.AddComponent<MoverTester>();
         }
-        else if (board.GetComponent<MoverTester>() == null && FindFirstObjectByType<MoverTester>() == null)
+        else if (board.GetComponent<MoverTester>() == null &&
+                 FindFirstObjectByType<MoverTester>() == null &&
+                 FindFirstObjectByType<TurnManager>() == null)
         {
             board.gameObject.AddComponent<MoverTester>();
         }
 
-        board.GenerateCampusBoard(board.campusLevel);
+        if (board.levelData == null)
+        {
+            board.levelData = ResolveLevelDataAsset(board.campusLevel);
+        }
+        board.GenerateCampusBoard(board.levelData);
         board.EnsureThreeStudentPawns();
         UnityEditor.Selection.activeGameObject = board.gameObject;
     }
@@ -152,17 +159,50 @@ public class ProceduralBoardGenerator : MonoBehaviour
         {
             UnityEditor.EditorApplication.delayCall += () =>
             {
-                if (this != null)
+                if (this == null) return;
+
+                if (lastBuiltLevel != campusLevel && (levelData == null || levelData.LevelNumber != campusLevel))
                 {
-                    if (levelData != null && levelData.SquareCount > 0)
-                        GenerateCampusBoard(levelData);
-                    else
-                        GenerateCampusBoard(campusLevel);
+                    LevelData resolved = ResolveLevelDataAsset(campusLevel);
+                    if (resolved != null) levelData = resolved;
+                }
+                else if (levelData == null)
+                {
+                    levelData = ResolveLevelDataAsset(campusLevel);
+                }
+
+                if (levelData != null && levelData.SquareCount > 0)
+                {
+                    GenerateCampusBoard(levelData);
                 }
             };
         }
     }
 #endif
+
+    /// <summary>
+    /// Résout automatiquement l'asset LevelData officiel (LVL_1, LVL_2 ou LVL_3) depuis Assets/Data/Levels.
+    /// </summary>
+    public static LevelData ResolveLevelDataAsset(int targetLevel)
+    {
+        int clamped = Mathf.Clamp(targetLevel, 1, 3);
+#if UNITY_EDITOR
+        string[] paths =
+        {
+            "Assets/Data/Levels/LVL_1_PremiereSemaine.asset",
+            "Assets/Data/Levels/LVL_2_MiSemestre.asset",
+            "Assets/Data/Levels/LVL_3_SemestreEnFolie.asset"
+        };
+        LevelData asset = UnityEditor.AssetDatabase.LoadAssetAtPath<LevelData>(paths[clamped - 1]);
+        if (asset != null) return asset;
+#endif
+        LevelData[] loaded = Resources.FindObjectsOfTypeAll<LevelData>();
+        foreach (LevelData ld in loaded)
+        {
+            if (ld != null && ld.LevelNumber == clamped && ld.SquareCount > 0) return ld;
+        }
+        return loaded.Length > 0 ? loaded[0] : null;
+    }
 
     // ==================== RÉACTIONS AUX ÉVÉNEMENTS (TÂCHE 5) ====================
 
@@ -183,15 +223,8 @@ public class ProceduralBoardGenerator : MonoBehaviour
         {
             if (i < tileOwners.Count && tileOwners[i] == playerId)
             {
-                if (creditorId >= 0)
-                {
-                    int currentLvl = (i < tileBuildingLevels.Count) ? tileBuildingLevels[i] : 0;
-                    UpdatePropertyVisual(i, creditorId, currentLvl);
-                }
-                else
-                {
-                    UpdatePropertyVisual(i, -1, 0);
-                }
+                // Règle Campus Tycoon : les terrains d'un joueur en faillite retournent à la banque au niveau 0
+                UpdatePropertyVisual(i, -1, 0);
             }
         }
     }
@@ -294,17 +327,21 @@ public class ProceduralBoardGenerator : MonoBehaviour
         return new CampusSquareDefinition(sq.DisplayName, cat, displayedCost, grp);
     }
 
-    // ==================== GÉNÉRATION DU PLATEAU ====================
+    // ==================== GÉNÉRATION DU PLATEAU (SOURCE UNIQUE : LevelData) ====================
 
     /// <summary>
-    /// Tâche 2 & 3 : Génère le plateau 3D directement depuis un asset LevelData.
+    /// Tâche 2 & Décision 2 : Génère le plateau 3D exclusivement depuis un asset LevelData.
     /// Force previewBuildingLevel = 0 en partie réelle pour que tous les terrains démarrent nus.
     /// </summary>
     public void GenerateCampusBoard(LevelData data)
     {
+        if (data == null)
+        {
+            data = levelData != null ? levelData : ResolveLevelDataAsset(campusLevel);
+        }
         if (data == null || data.SquareCount == 0)
         {
-            GenerateCampusBoard(campusLevel);
+            Debug.LogWarning("[ProceduralBoardGenerator] Aucun LevelData assigné ou trouvé dans Assets/Data/Levels.");
             return;
         }
 
@@ -335,29 +372,13 @@ public class ProceduralBoardGenerator : MonoBehaviour
     [ContextMenu("Regénérer le Plateau Campus Tycoon")]
     public void GenerateCampusBoard(int level)
     {
-        EnsureValidMaterial();
-
         campusLevel = Mathf.Clamp(level, 1, 3);
-        lastBuiltLevel = campusLevel;
-        lastPreviewBuildingLevel = previewBuildingLevel;
-        lastShowcaseState = livelyCampusShowcase;
-        lastLevelData = levelData;
-
-        // Si un LevelData correspondant est assigné, on l'utilise en priorité
-        if (levelData != null && levelData.SquareCount > 0)
+        if (levelData == null || levelData.LevelNumber != campusLevel)
         {
-            CampusSquareDefinition[] dataLayout = new CampusSquareDefinition[levelData.SquareCount];
-            for (int i = 0; i < levelData.SquareCount; i++)
-            {
-                dataLayout[i] = FromSquareData(levelData.Squares[i]);
-            }
-            BuildBoardFromLayout(dataLayout);
-            return;
+            LevelData resolved = ResolveLevelDataAsset(campusLevel);
+            if (resolved != null) levelData = resolved;
         }
-
-        // Secours tant que les assets LevelData de Franck ne sont pas sur main
-        CampusSquareDefinition[] fallbackLayout = GetLayoutForLevel(campusLevel);
-        BuildBoardFromLayout(fallbackLayout);
+        GenerateCampusBoard(levelData);
     }
 
     private void BuildBoardFromLayout(CampusSquareDefinition[] layout)
@@ -472,6 +493,22 @@ public class ProceduralBoardGenerator : MonoBehaviour
             EnsureThreeStudentPawns();
         }
         return studentPawns[clamped];
+    }
+
+    /// <summary>
+    /// Applique un multiplicateur de vitesse aux 3 pions (ex: 1x pour l'humain, 2x pour les IA, 5x en Turbo).
+    /// </summary>
+    public void SetAllPawnsSpeedMultiplier(float multiplier)
+    {
+        if (studentPawns == null) return;
+        float clamped = Mathf.Clamp(multiplier, 0.5f, 10f);
+        for (int i = 0; i < studentPawns.Length; i++)
+        {
+            if (studentPawns[i] != null)
+            {
+                studentPawns[i].speedMultiplier = clamped;
+            }
+        }
     }
 
     /// <summary>
@@ -784,105 +821,5 @@ public class ProceduralBoardGenerator : MonoBehaviour
         if (generatedTiles.Count == 0) return transform.position;
         int wrappedIndex = ((tileIndex % generatedTiles.Count) + generatedTiles.Count) % generatedTiles.Count;
         return generatedTiles[wrappedIndex].GetStudentPawnPosition(playerId, inColle);
-    }
-
-    /// <summary>
-    /// Disposition de secours (utilisée uniquement tant que les assets LevelData de Franck ne sont pas assignés).
-    /// </summary>
-    private CampusSquareDefinition[] GetLayoutForLevel(int level)
-    {
-        var C = ProceduralTileView.TileCategory.Corner;
-        var P = ProceduralTileView.TileCategory.Property;
-        var S = ProceduralTileView.TileCategory.Station;
-        var E = ProceduralTileView.TileCategory.EventCard;
-        var Co = ProceduralTileView.TileCategory.Company;
-        var T = ProceduralTileView.TileCategory.Tax;
-        var Sp = ProceduralTileView.TileCategory.Special;
-
-        var Marron = ProceduralBuildingGenerator.CampusGroup.Marron;
-        var BleuCiel = ProceduralBuildingGenerator.CampusGroup.BleuCiel;
-        var Rose = ProceduralBuildingGenerator.CampusGroup.Rose;
-        var Orange = ProceduralBuildingGenerator.CampusGroup.Orange;
-        var Rouge = ProceduralBuildingGenerator.CampusGroup.Rouge;
-        var Or = ProceduralBuildingGenerator.CampusGroup.Or;
-
-        if (level == 1)
-        {
-            return new CampusSquareDefinition[]
-            {
-                new CampusSquareDefinition("La Rentrée", C),
-                new CampusSquareDefinition("Cafétéria", P, 60, Marron),
-                new CampusSquareDefinition("Salle de TP", P, 60, Marron),
-                new CampusSquareDefinition("RER A – Noisy-Champs", S, 150),
-                new CampusSquareDefinition("Colle", C),
-                new CampusSquareDefinition("Bibliothèque", P, 100, BleuCiel),
-                new CampusSquareDefinition("Frais de scolarité", T, 100),
-                new CampusSquareDefinition("Salle de projet", P, 100, BleuCiel),
-                new CampusSquareDefinition("Foyer étudiant", C),
-                new CampusSquareDefinition("FabLab", P, 140, Rose),
-                new CampusSquareDefinition("Événement", E),
-                new CampusSquareDefinition("Salle de robotique", P, 140, Rose),
-                new CampusSquareDefinition("Rattrapage", C),
-                new CampusSquareDefinition("Bus du campus", S, 150),
-                new CampusSquareDefinition("Amphi A", P, 180, Orange),
-                new CampusSquareDefinition("Amphi B", P, 180, Orange)
-            };
-        }
-        else if (level == 3)
-        {
-            return new CampusSquareDefinition[]
-            {
-                new CampusSquareDefinition("La Rentrée", C),
-                new CampusSquareDefinition("Cafétéria", P, 60, Marron),
-                new CampusSquareDefinition("Salle de TP", P, 60, Marron),
-                new CampusSquareDefinition("Événement", E),
-                new CampusSquareDefinition("RER A – Noisy-Champs", S, 150),
-                new CampusSquareDefinition("Bibliothèque", P, 100, BleuCiel),
-                new CampusSquareDefinition("Colle", C),
-                new CampusSquareDefinition("Frais de scolarité", T, 100),
-                new CampusSquareDefinition("Salle de projet", P, 100, BleuCiel),
-                new CampusSquareDefinition("Machine à café", Co, 120),
-                new CampusSquareDefinition("FabLab", P, 140, Rose),
-                new CampusSquareDefinition("Salle de robotique", P, 140, Rose),
-                new CampusSquareDefinition("Foyer étudiant", C),
-                new CampusSquareDefinition("Événement", E),
-                new CampusSquareDefinition("Bus du campus", S, 150),
-                new CampusSquareDefinition("Amphi A", P, 180, Orange),
-                new CampusSquareDefinition("Amphi B", P, 180, Orange),
-                new CampusSquareDefinition("Roulette du BDE", Sp, 50),
-                new CampusSquareDefinition("Rattrapage", C),
-                new CampusSquareDefinition("Bureau du BDE", P, 240, Rouge),
-                new CampusSquareDefinition("Événement", E),
-                new CampusSquareDefinition("Direction", P, 260, Rouge),
-                new CampusSquareDefinition("Incubateur de start-ups", P, 300, Or),
-                new CampusSquareDefinition("Laboratoire de recherche", P, 320, Or)
-            };
-        }
-        else
-        {
-            return new CampusSquareDefinition[]
-            {
-                new CampusSquareDefinition("La Rentrée", C),
-                new CampusSquareDefinition("Cafétéria", P, 60, Marron),
-                new CampusSquareDefinition("Salle de TP", P, 60, Marron),
-                new CampusSquareDefinition("Événement", E),
-                new CampusSquareDefinition("RER A – Noisy-Champs", S, 150),
-                new CampusSquareDefinition("Colle", C),
-                new CampusSquareDefinition("Bibliothèque", P, 100, BleuCiel),
-                new CampusSquareDefinition("Frais de scolarité", T, 100),
-                new CampusSquareDefinition("Salle de projet", P, 100, BleuCiel),
-                new CampusSquareDefinition("Machine à café", Co, 120),
-                new CampusSquareDefinition("Foyer étudiant", C),
-                new CampusSquareDefinition("FabLab", P, 140, Rose),
-                new CampusSquareDefinition("Événement", E),
-                new CampusSquareDefinition("Salle de robotique", P, 140, Rose),
-                new CampusSquareDefinition("Bus du campus", S, 150),
-                new CampusSquareDefinition("Rattrapage", C),
-                new CampusSquareDefinition("Amphi A", P, 180, Orange),
-                new CampusSquareDefinition("Amphi B", P, 180, Orange),
-                new CampusSquareDefinition("Bureau du BDE", P, 240, Rouge),
-                new CampusSquareDefinition("Direction", P, 260, Rouge)
-            };
-        }
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class ProceduralDiceRoller : MonoBehaviour
 {
@@ -11,7 +12,10 @@ public class ProceduralDiceRoller : MonoBehaviour
     public float diceScale = 0.65f;
     public Vector3 centerTableOffset = new Vector3(0f, 0.45f, 0f);
 
-    [Header("Matériau Partagé (Optionnel)")]
+    [Header("Vitesse d'Animation (1x = Humain, 2x+ = Tours IA / Turbo)")]
+    [Range(0.5f, 10f)] public float speedMultiplier = 1f;
+
+    [Header("Matériau Partagé (Auto-géré si vide)")]
     public Material sharedDiceMaterial;
 
     public bool IsRolling { get; private set; }
@@ -35,7 +39,36 @@ public class ProceduralDiceRoller : MonoBehaviour
 
     void Awake()
     {
+        EnsureValidDiceMaterial();
         EnsureDiceCreated();
+    }
+
+    void Update()
+    {
+        // Règle Campus Tycoon : animation de lancer ignorable d'un clic
+        if (IsRolling && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+        {
+            SkipRollAnimation();
+        }
+    }
+
+    public Material EnsureValidDiceMaterial()
+    {
+        if (sharedDiceMaterial != null) return sharedDiceMaterial;
+
+        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+        if (shader == null) shader = Shader.Find("Universal Render Pipeline/Simple Lit");
+        if (shader == null) shader = Shader.Find("Standard");
+
+        if (shader != null)
+        {
+            sharedDiceMaterial = new Material(shader)
+            {
+                name = "Auto_Campus_Dice_URP_Mat",
+                enableInstancing = true
+            };
+        }
+        return sharedDiceMaterial;
     }
 
     /// <summary>
@@ -54,6 +87,7 @@ public class ProceduralDiceRoller : MonoBehaviour
     /// </summary>
     public void RollDice(int die1Value, int die2Value, Action<int, int> onRollCompleted = null, bool singleDieMode = false)
     {
+        EnsureValidDiceMaterial();
         EnsureDiceCreated();
 
         die1Value = Mathf.Clamp(die1Value, 1, 6);
@@ -87,11 +121,12 @@ public class ProceduralDiceRoller : MonoBehaviour
         Vector3 spinAxis2 = new Vector3(-0.6f, 1f, -0.5f).normalized;
 
         float elapsed = 0f;
+        float effectiveDuration = Mathf.Max(0.18f, rollDuration / Mathf.Max(0.1f, speedMultiplier));
 
-        while (elapsed < rollDuration && !skipRequested)
+        while (elapsed < effectiveDuration && !skipRequested)
         {
             elapsed += Time.deltaTime;
-            float t = Mathf.Clamp01(elapsed / rollDuration);
+            float t = Mathf.Clamp01(elapsed / effectiveDuration);
 
             // Trajectoire avec rebond amorti au sol
             float bounceOffset = ComputeDiceBounceHeight(t) * throwArcHeight;
