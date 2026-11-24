@@ -118,7 +118,6 @@ namespace CampusTycoon
                 if (skipTurn) { yield return Pause(player); yield break; }
             }
 
-            CampusEvents.RaiseDoubleRolled(player.Index);
             bool firstRoll = true;
             while (true)
             {
@@ -155,6 +154,7 @@ namespace CampusTycoon
                 bool replay = d1 == d2 && firstRoll && !player.InDetention && !player.IsBankrupt && !IsGameOver();
                 if (!replay) break;
                 firstRoll = false;
+                CampusEvents.RaiseDoubleRolled(player.Index);
                 Debug.Log($"[Tour] Double : {player.Character.DisplayName} rejoue une fois.");
             }
 
@@ -454,7 +454,8 @@ namespace CampusTycoon
             if (used) yield break;
 
             yield return Pay(tenant, rent, owner.Index);
-            State.Stats[tenant.Index].RentPaid += rent; puis State.Stats[owner.Index].RentCollected += rent;
+            State.Stats[tenant.Index].RentPaid += rent;
+            State.Stats[owner.Index].RentCollected += rent;
             CampusEvents.RaiseRentPaid(tenant.Index, owner.Index, square.Index, rent);
             Debug.Log($"[Loyer] {tenant.Character.DisplayName} paie {rent} à {owner.Character.DisplayName} ({square.Data.DisplayName}).");
         }
