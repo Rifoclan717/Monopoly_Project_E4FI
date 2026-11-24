@@ -117,8 +117,8 @@ namespace CampusTycoon
                 if (skipTurn) { yield return Pause(player); yield break; }
             }
 
-            bool firstRoll = true;
             CampusEvents.RaiseDoubleRolled(player.Index);
+            bool firstRoll = true;
             while (true)
             {
                 Phase = TurnPhase.Roll;
