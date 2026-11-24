@@ -112,6 +112,7 @@ namespace CampusTycoon
             if (player.InDetention)
             {
                 Phase = TurnPhase.Detention;
+                State.Stats[player.Index].TurnsInDetention++;
                 bool skipTurn = false;
                 yield return HandleDetention(player, skip => skipTurn = skip);
                 if (skipTurn) { yield return Pause(player); yield break; }
@@ -244,6 +245,7 @@ namespace CampusTycoon
 
             player.RemoveMoney(price);
             square.SetOwner(player.Index);
+            State.Stats[player.Index].PropertiesBought++;
             CampusEvents.RaisePropertyBought(player.Index, square.Index, price);
             RefreshVisual(square);
         }
@@ -378,6 +380,7 @@ namespace CampusTycoon
             }
             int payout = roulettePayouts[die - 1];
             player.AddMoney(payout);
+            State.Stats[player.Index].RouletteNet += payout - stake;
             CampusEvents.RaiseRouletteResolved(player.Index, die, payout);
             Debug.Log($"[Roulette] {player.Character.DisplayName} mise {stake}, dé : {die}, gain {payout} (net {payout - stake:+0;-0;0}).");
         }
@@ -451,6 +454,7 @@ namespace CampusTycoon
             if (used) yield break;
 
             yield return Pay(tenant, rent, owner.Index);
+            State.Stats[tenant.Index].RentPaid += rent; puis State.Stats[owner.Index].RentCollected += rent;
             CampusEvents.RaiseRentPaid(tenant.Index, owner.Index, square.Index, rent);
             Debug.Log($"[Loyer] {tenant.Character.DisplayName} paie {rent} à {owner.Character.DisplayName} ({square.Data.DisplayName}).");
         }
@@ -558,6 +562,7 @@ namespace CampusTycoon
         {
             player.RemoveMoney(UpgradeCostOf(square));
             square.Upgrade();
+            State.Stats[player.Index].UpgradesBuilt++;
             State.UpgradedThisTurn.Add(square.Index);
             CampusEvents.RaisePropertyUpgraded(player.Index, square.Index, square.UpgradeLevel);
             RefreshVisual(square);
