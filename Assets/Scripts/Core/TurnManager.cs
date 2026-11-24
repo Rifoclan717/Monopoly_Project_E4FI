@@ -309,7 +309,7 @@ namespace CampusTycoon
                     break;
 
                 case CardEffect.FreeUpgrade:
-                    ApplyFreeUpgrade(player, card.Amount);
+                    yield return ApplyFreeUpgrade(player, card.Amount);
                     break;
 
                 case CardEffect.ExemptionTicket:
@@ -319,7 +319,7 @@ namespace CampusTycoon
         }
 
         /// <summary>Création étage gratuit sur un terrain en monopole, sinon le joueur reçoit fallbackMoney.</summary>
-        private void ApplyFreeUpgrade(Player player, int fallbackMoney)
+        private IEnumerator ApplyFreeUpgrade(Player player, int fallbackMoney)
         {
             List<BoardSquare> candidates = State.OwnedBy(player.Index)
                 .Where(s => s.CanBeUpgraded && State.HasMonopoly(player.Index, s.Data.Group)).ToList();
@@ -328,7 +328,13 @@ namespace CampusTycoon
             if (candidates.Count > 0)
             {
                 if (player.IsHuman)
-                    target = candidates.OrderByDescending(s => s.Data.UpgradeCost).First();
+                {
+                    candidates = candidates.OrderByDescending(s => s.Data.UpgradeCost).ToList();
+                    int pick = 0;
+                    yield return AskChoice("Amélioration offerte : choisissez le terrain",
+                        candidates.Select(s => s.Data.DisplayName).ToList(), n => pick = n);
+                    target = candidates[pick];
+                }
                 else
                 {
                     int chosen = ai[player.Index].ChooseFreeUpgrade(Snapshot());
@@ -336,7 +342,7 @@ namespace CampusTycoon
                 }
             }
 
-            if (target == null) { player.AddMoney(fallbackMoney); return; }
+            if (target == null) { player.AddMoney(fallbackMoney); yield break; }
             target.Upgrade();
             CampusEvents.RaisePropertyUpgraded(player.Index, target.Index, target.UpgradeLevel);
             RefreshVisual(target);
@@ -713,6 +719,26 @@ namespace CampusTycoon
             }
             if (hud != null) hud.StopHumanDecisionTimer();
             answer(result ?? false);
+        }
+
+        private IEnumerator AskChoice(string prompt, List<string> labels, System.Action<int> answer)
+        {
+            string text = prompt;
+            for (int i = 0; i < labels.Count && i < 9; i++) text += $"  [{i + 1}] {labels[i]}";
+            Debug.Log($"[Tour] {text}");
+            if (hud != null) hud.StartHumanDecisionTimer(text);
+                int? result = null;
+            float timeLeft = humanDecisionSeconds;
+            while (result == null && timeLeft > 0f)
+            {
+                Keyboard kb = Keyboard.current;
+                for (int i = 0; kb != null && i < labels.Count && i < 9; i++)
+                    if (kb[Key.Digit1 + i].wasPressedThisFrame) result = i;
+                timeLeft -= Time.deltaTime;
+                yield return null;
+            }
+                if (hud != null) hud.StopHumanDecisionTimer();
+                answer(result ?? 0);
         }
 
         private IEnumerator Pause(Player player)
