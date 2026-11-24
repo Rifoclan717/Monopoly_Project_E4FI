@@ -21,6 +21,8 @@ namespace CampusTycoon
         /// Les rejeux sur double ne comptent pas.
         /// </summary>
         public int[] TurnsStarted { get; }
+
+        public PlayerStats[] Stats { get; }
         /// <summary>Événement du semestre actif, ou null.</summary>
         public GlobalEventType? ActiveEvent { get; set; }
         /// <summary>Amélioration des terrains : 1 niveau par terrain et par tour</summary>
@@ -34,6 +36,8 @@ namespace CampusTycoon
             for (int i = 0; i < characters.Count; i++)
                 Players.Add(new Player(i, characters[i], i == 0, level.StartingMoney));
             TurnsStarted = new int[characters.Count];
+            Stats = new PlayerStats[characters.Count];
+            for (int i = 0; i < Stats.Length; i++) Stats[i] = new PlayerStats();
         }
 
         public int SquareCount => Board.Count;
