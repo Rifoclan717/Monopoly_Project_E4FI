@@ -173,6 +173,7 @@ namespace CampusTycoon
                     foreach (Player p in State.ActivePlayers)
                         p.AddMoney(activeEvent.Amount * State.CountOwned(p.Index, SquareType.Property));
                 Debug.Log($"[Semestre] Fin de : {activeEvent.Title}");
+                CampusEvents.RaiseGlobalEventEnded(activeEvent.Title);
                 activeEvent = null;
                 State.ActiveEvent = null;
             }

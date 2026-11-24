@@ -38,6 +38,9 @@ namespace CampusTycoon
         // Événement du semestre (eventTitle, eventEffectDescription)
         public static event Action<string, string> OnGlobalEventStarted;
 
+        // Fin d'un événement du semestre (eventTitle)
+        public static event Action<string> OnGlobalEventEnded;
+
         // Pouvoir d'étudiant utilisé (playerId, characterName, powerName, powerDescription)
         public static event Action<int, string, string, string> OnPowerUsed;
 
@@ -78,6 +81,9 @@ namespace CampusTycoon
 
         public static void RaiseGlobalEventStarted(string title, string effect)
             => OnGlobalEventStarted?.Invoke(title, effect);
+        
+        public static void RaiseGlobalEventEnded(string title)
+            => OnGlobalEventEnded?.Invoke(title);
 
         public static void RaisePowerUsed(int playerId, string charName, string powerName, string desc)
             => OnPowerUsed?.Invoke(playerId, charName, powerName, desc);
