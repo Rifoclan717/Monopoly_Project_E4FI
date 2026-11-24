@@ -12,13 +12,13 @@ public class PawnSplineMover : MonoBehaviour
 
     [Header("Paramètres d'Animation (Spline & Quaternions)")]
     [Tooltip("Durée d'un saut entre deux cases adjacentes")]
-    public float stepDuration = 0.28f;
+    public float stepDuration = 0.34f;
     [Tooltip("Hauteur de l'arc de Bézier standard")]
     public float jumpHeight = 0.85f;
     [Tooltip("Hauteur de la grande parabole quand l'étudiant est envoyé en Colle")]
     public float colleArcHeight = 3.2f;
     [Tooltip("Pause très courte entre deux cases (effet jeu de plateau)")]
-    public float hopPause = 0.03f;
+    public float hopPause = 0.05f;
 
     [Header("Règles Campus Tycoon")]
     [Tooltip("1x = Humain, 2x = Tour IA (4-6s), 5x = Fin de partie accélérée")]

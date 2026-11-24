@@ -11500,10 +11500,13 @@ MonoBehaviour:
   currentTurnNumber: 1
   maxTurns: 15
   bestScore: 0
-  accelerateAITurns: 1
-  aiTurnSpeedMultiplier: 2.2
+  accelerateAITurns: 0
+  aiTurnSpeedMultiplier: 1.6
   turboModeActive: 0
-  turboSpeedMultiplier: 4
+  turboSpeedMultiplier: 3.5
+  normalAIPauseSeconds: 1.55
+  fastAIPauseSeconds: 0.75
+  turboAIPauseSeconds: 0.25
   turnManager: {fileID: 1460564089}
   board: {fileID: 1369751265}
   diceRoller: {fileID: 1415480673}
@@ -13259,7 +13262,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bceb020b2040ad5418e47ab970cf7897, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ProceduralDiceRoller
-  rollDuration: 1.35
+  rollDuration: 1.5
   throwArcHeight: 2.4
   diceScale: 0.68
   centerTableOffset: {x: 0, y: 0.58, z: 0}
@@ -13762,7 +13765,7 @@ MonoBehaviour:
   pawns: []
   dice: {fileID: 1415480673}
   hud: {fileID: 1143231916}
-  aiPause: 0.6
+  aiPause: 1.55
   humanDecisionSeconds: 10
 --- !u!4 &1460564090
 Transform:
@@ -20676,6 +20679,7 @@ MonoBehaviour:
   hud: {fileID: 1143231916}
   orbitalCamera: {fileID: 0}
   openMainMenuOnStart: 1
+  normalAIPauseSeconds: 1.55
 --- !u!82 &1143231922
 AudioSource:
   m_ObjectHideFlags: 0
@@ -20786,7 +20790,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CampusAudioManager
   masterVolume: 0.55
+  musicVolume: 0.22
   isMuted: 0
+  isMusicMuted: 0
 --- !u!114 &1143231923
 MonoBehaviour:
   m_ObjectHideFlags: 0

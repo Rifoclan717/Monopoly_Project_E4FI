@@ -31,12 +31,16 @@ public class CampusHUDController : MonoBehaviour
     public int bestScore = 0;
 
     [Header("Accélération des Animations pendant les Tours d'IA")]
-    [Tooltip("Si activé, accélère automatiquement les pions et les dés pendant les tours des rivaux IA")]
-    public bool accelerateAITurns = true;
-    [Range(1f, 5f)] public float aiTurnSpeedMultiplier = 2.2f;
+    [Tooltip("Désactivé par défaut pour un rythme IA réaliste (4 à 6 s par tour). Activable en jeu.")]
+    public bool accelerateAITurns = false;
+    [Range(1f, 5f)] public float aiTurnSpeedMultiplier = 1.6f;
     [Tooltip("Mode Turbo global activable avec la touche [V] ou le bouton HUD")]
     public bool turboModeActive = false;
-    [Range(2f, 8f)] public float turboSpeedMultiplier = 4f;
+    [Range(2f, 8f)] public float turboSpeedMultiplier = 3.5f;
+    [Tooltip("Temps de réflexion IA en mode normal / rapide / turbo (secondes)")]
+    public float normalAIPauseSeconds = 1.55f;
+    public float fastAIPauseSeconds = 0.75f;
+    public float turboAIPauseSeconds = 0.25f;
 
     [Header("Références Automatiques (Trouvées si vides)")]
     public TurnManager turnManager;
@@ -160,6 +164,7 @@ public class CampusHUDController : MonoBehaviour
 
     // Pause
     private Text pauseMuteBtnText;
+    private Text pauseMusicBtnText;
 
     // Portraits procéduraux (fallback si CharacterData.Portrait == null)
     private readonly Dictionary<CharacterId, Sprite> proceduralPortraits = new Dictionary<CharacterId, Sprite>();
@@ -451,13 +456,17 @@ public class CampusHUDController : MonoBehaviour
     private void ApplyAnimationSpeedForPlayer(int playerId)
     {
         float targetSpeed = 1f;
+        float targetAIPause = normalAIPauseSeconds;
+
         if (turboModeActive)
         {
             targetSpeed = turboSpeedMultiplier;
+            targetAIPause = turboAIPauseSeconds;
         }
-        else if (accelerateAITurns && playerId != 0)
+        else if (accelerateAITurns)
         {
-            targetSpeed = aiTurnSpeedMultiplier;
+            if (playerId != 0) targetSpeed = aiTurnSpeedMultiplier;
+            targetAIPause = fastAIPauseSeconds;
         }
 
         if (board == null) board = FindFirstObjectByType<ProceduralBoardGenerator>();
@@ -465,6 +474,17 @@ public class CampusHUDController : MonoBehaviour
 
         if (diceRoller == null) diceRoller = FindFirstObjectByType<ProceduralDiceRoller>();
         if (diceRoller != null) diceRoller.speedMultiplier = targetSpeed;
+
+        // Adapte aussi le temps de réflexion IA sur TurnManager (sans modifier Core/TurnManager.cs)
+        if (turnManager == null) turnManager = FindFirstObjectByType<TurnManager>();
+        if (turnManager != null)
+        {
+            FieldInfo pauseField = turnManager.GetType().GetField("aiPause", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (pauseField != null)
+            {
+                pauseField.SetValue(turnManager, targetAIPause);
+            }
+        }
     }
 
     // ==================== API PUBLIQUE CONSERVÉE (COMPATIBILITÉ TURNMANAGER / MOVERTESTER) ====================
@@ -730,6 +750,13 @@ public class CampusHUDController : MonoBehaviour
         RefreshToolbarVisuals();
     }
 
+    private void ToggleMusic()
+    {
+        ClearUISelection();
+        if (audioManager != null) audioManager.ToggleMusic();
+        RefreshToolbarVisuals();
+    }
+
     private void RecenterCamera()
     {
         ClearUISelection();
@@ -949,8 +976,10 @@ public class CampusHUDController : MonoBehaviour
             btnTurboBg.color = turboModeActive ? ColAccentAmber : ColCardIdle;
         }
         bool muted = audioManager != null && audioManager.isMuted;
+        bool musicMuted = audioManager != null && audioManager.isMusicMuted;
         if (btnMuteLabel != null) btnMuteLabel.text = muted ? "Son [M] : OFF" : "Son [M] : ON";
-        if (pauseMuteBtnText != null) pauseMuteBtnText.text = muted ? "Activer le son" : "Couper le son";
+        if (pauseMuteBtnText != null) pauseMuteBtnText.text = muted ? "Activer tout le son" : "Couper tout le son";
+        if (pauseMusicBtnText != null) pauseMusicBtnText.text = musicMuted ? "Musique calme : OFF" : "Musique calme : ON";
     }
 
     private void RefreshAllInGamePanels()
@@ -1009,6 +1038,13 @@ public class CampusHUDController : MonoBehaviour
                 }
                 else
                 {
+                    if (isTurn && !p.IsHuman)
+                    {
+                        string phaseLabel = turnManager != null && turnManager.Phase == TurnManager.TurnPhase.Move
+                            ? "Se déplace..."
+                            : "Réfléchit...";
+                        badges.Add(phaseLabel);
+                    }
                     badges.Add(p.PowerUsed ? "Pouvoir utilisé" : $"Pouvoir : {p.Character.PowerName}");
                     if (p.HasExemptionTicket) badges.Add("[BILLET]");
                     if (p.InDetention) badges.Add("[EN COLLE]");
@@ -1599,15 +1635,17 @@ public class CampusHUDController : MonoBehaviour
         StretchFull(pauseModalRoot.GetComponent<RectTransform>());
 
         GameObject box = CreatePanel("PauseBox", pauseModalRoot.transform, ColPanelDark);
-        SetAnchoredRect(box.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(440f, 450f));
+        SetAnchoredRect(box.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(440f, 505f));
 
         Text title = CreateText("Title", box.transform, "PAUSE", 30, FontStyle.Bold, ColTextMain, TextAnchor.MiddleCenter);
         SetAnchoredRect(title.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -20f), new Vector2(0f, 44f));
 
-        float y = -86f;
+        float y = -82f;
         AddPauseButton(box.transform, "Reprendre la partie", ColAccentGreen, ref y, () => SetPaused(false));
         AddPauseButton(box.transform, "Règles & Commandes", ColCardIdle, ref y, () => SetRulesModalOpen(true));
-        Button bMute = AddPauseButton(box.transform, "Couper le son", ColCardIdle, ref y, ToggleMute);
+        Button bMusic = AddPauseButton(box.transform, "Musique calme : ON", ColCardIdle, ref y, ToggleMusic);
+        pauseMusicBtnText = bMusic.GetComponentInChildren<Text>();
+        Button bMute = AddPauseButton(box.transform, "Couper tout le son", ColCardIdle, ref y, ToggleMute);
         pauseMuteBtnText = bMute.GetComponentInChildren<Text>();
         AddPauseButton(box.transform, "Recommencer ce niveau", ColAccentBlue, ref y, () =>
         {

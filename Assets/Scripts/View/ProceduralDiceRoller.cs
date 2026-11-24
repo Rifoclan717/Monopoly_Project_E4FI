@@ -8,7 +8,7 @@ public class ProceduralDiceRoller : MonoBehaviour
 {
     [Header("Paramètres Campus Tycoon (<= 2 secondes, ignorable)")]
     [Tooltip("Durée du lancer (Règle Campus Tycoon : 2 secondes maximum)")]
-    [Range(0.4f, 2.0f)] public float rollDuration = 1.35f;
+    [Range(0.4f, 2.0f)] public float rollDuration = 1.50f;
     public float throwArcHeight = 2.4f;
     public float diceScale = 0.68f;
     public Vector3 centerTableOffset = new Vector3(0f, 0.58f, 0f);

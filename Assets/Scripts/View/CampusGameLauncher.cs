@@ -34,9 +34,11 @@ public class CampusGameLauncher : MonoBehaviour
     public CampusHUDController hud;
     public OrbitalCamera orbitalCamera;
 
-    [Header("Comportement au démarrage")]
+    [Header("Comportement au démarrage & Rythme IA")]
     [Tooltip("Affiche le Menu Principal au lancement. Désactiver pour lancer directement la partie en test.")]
     public bool openMainMenuOnStart = true;
+    [Tooltip("Temps de réflexion réaliste de l'IA en mode normal (vise 4 à 6 s par tour IA)")]
+    [Range(0.4f, 3.0f)] public float normalAIPauseSeconds = 1.55f;
 
     public bool IsInMainMenu { get; private set; }
     public int SelectedLevelIndex { get; private set; } = 1;
@@ -257,6 +259,7 @@ public class CampusGameLauncher : MonoBehaviour
             if (board != null) SetPrivateField(turnManager, "board", board);
             if (diceRoller != null) SetPrivateField(turnManager, "dice", diceRoller);
             if (hud != null) SetPrivateField(turnManager, "hud", hud);
+            SetPrivateField(turnManager, "aiPause", normalAIPauseSeconds);
         }
     }
 
@@ -330,3 +333,4 @@ public class CampusGameLauncher : MonoBehaviour
 #endif
     }
 }
+
