@@ -540,7 +540,7 @@ namespace CampusTycoon
         {
             square.Downgrade();
             player.AddMoney(square.Data.UpgradeCost / 2);
-            CampusEvents.RaisePropertyUpgraded(player.Index, square.Index, square.UpgradeLevel);
+            CampusEvents.RaisePropertyDowngraded(player.Index, square.Index, square.UpgradeLevel);
             RefreshVisual(square);
         }
 
@@ -548,6 +548,7 @@ namespace CampusTycoon
         {
             square.ClearOwner();
             player.AddMoney(square.Data.Price / 2);
+            CampusEvents.RaisePropertySold(player.Index, square.Index, square.Data.Price / 2);
             RefreshVisual(square);
         }
 

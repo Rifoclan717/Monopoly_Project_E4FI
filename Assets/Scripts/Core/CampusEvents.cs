@@ -53,6 +53,12 @@ namespace CampusTycoon
         // Entrée ou sortie de colle (playerId, inDetention)
         public static event Action<int, bool> OnDetentionChanged;
 
+        // Étage vendu (playerId, tileIndex, newBuildingLevel 0..2)
+        public static event Action<int, int, int> OnPropertyDowngraded;
+
+        // Terrain vendu à la banque (playerId, tileIndex, amountReceived)
+        public static event Action<int, int, int> OnPropertySold;
+
         // ==================== MÉTHODES D'ÉMISSION (Appels depuis Logique ou Testeur) ====================
 
         public static void RaiseTurnStarted(int playerId, int turnNumber, int maxTurns = 15)
@@ -96,5 +102,11 @@ namespace CampusTycoon
 
         public static void RaiseDetentionChanged(int playerId, bool inDetention)
             => OnDetentionChanged?.Invoke(playerId, inDetention);
+
+        public static void RaisePropertyDowngraded(int playerId, int tileIndex, int newLevel)
+            => OnPropertyDowngraded?.Invoke(playerId, tileIndex, newLevel);
+
+        public static void RaisePropertySold(int playerId, int tileIndex, int amount)
+            => OnPropertySold?.Invoke(playerId, tileIndex, amount);
     }
 }
