@@ -11468,6 +11468,10 @@ GameObject:
   - component: {fileID: 1143231917}
   - component: {fileID: 1143231916}
   - component: {fileID: 1143231918}
+  - component: {fileID: 1143231920}
+  - component: {fileID: 1143231922}
+  - component: {fileID: 1143231921}
+  - component: {fileID: 1143231923}
   m_Layer: 0
   m_Name: HUD
   m_TagString: Untagged
@@ -11504,6 +11508,10 @@ MonoBehaviour:
   board: {fileID: 1369751265}
   diceRoller: {fileID: 1415480673}
   barkController: {fileID: 1143231918}
+  launcher: {fileID: 1143231920}
+  tileInspector: {fileID: 1143231923}
+  audioManager: {fileID: 1143231921}
+  orbitalCamera: {fileID: 0}
 --- !u!114 &1143231918
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -12744,7 +12752,7 @@ MonoBehaviour:
   tileHeight: 0.25
   tileGap: 0.08
   buildingPrefab: {fileID: 0}
-  sharedBoardMaterial: {fileID: 595609696}
+  sharedBoardMaterial: {fileID: 2100000, guid: 7f8a9b1c2d3e4f50a6b7c8d9e0f1a2b3, type: 2}
   cameraTargetToCenter: {fileID: 1313437398}
   studentPawns:
   - {fileID: 0}
@@ -13253,9 +13261,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ProceduralDiceRoller
   rollDuration: 1.35
   throwArcHeight: 2.4
-  diceScale: 0.65
-  centerTableOffset: {x: 0, y: 0.45, z: 0}
-  sharedDiceMaterial: {fileID: 0}
+  diceScale: 0.68
+  centerTableOffset: {x: 0, y: 0.58, z: 0}
+  speedMultiplier: 1
+  sharedDiceMaterial: {fileID: 2100000, guid: 7f8a9b1c2d3e4f50a6b7c8d9e0f1a2b3, type: 2}
 --- !u!4 &1415480674
 Transform:
   m_ObjectHideFlags: 0
@@ -20640,6 +20649,159 @@ MonoBehaviour:
   - {fileID: 1388322471}
   - {fileID: 1781533535}
   - {fileID: 1426766536}
+--- !u!114 &1143231920
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1143231915}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a1b2c3d4e5f64789a0b1c2d3e4f50002, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CampusGameLauncher
+  availableLevels:
+  - {fileID: 11400000, guid: 88ab4a966e013334b884104f723fe6f4, type: 2}
+  - {fileID: 11400000, guid: af8c8555d2ab0364a82cfc3e989c83bb, type: 2}
+  - {fileID: 11400000, guid: 3bc9194099c178947b653cd04daf73e3, type: 2}
+  availableCharacters:
+  - {fileID: 11400000, guid: fc6e8e03e3afa1f42a2b9b8b9ccd3e8e, type: 2}
+  - {fileID: 11400000, guid: 2daac3645ad3c6f40950b99d518a468b, type: 2}
+  - {fileID: 11400000, guid: d08292f237911aa48b63cd4d7d180420, type: 2}
+  defaultCampusMaterial: {fileID: 2100000, guid: 7f8a9b1c2d3e4f50a6b7c8d9e0f1a2b3, type: 2}
+  turnManager: {fileID: 1460564089}
+  board: {fileID: 1369751265}
+  diceRoller: {fileID: 1415480673}
+  hud: {fileID: 1143231916}
+  orbitalCamera: {fileID: 0}
+  openMainMenuOnStart: 1
+--- !u!82 &1143231922
+AudioSource:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1143231915}
+  m_Enabled: 1
+  serializedVersion: 4
+  OutputAudioMixerGroup: {fileID: 0}
+  m_audioClip: {fileID: 0}
+  m_Resource: {fileID: 0}
+  m_PlayOnAwake: 0
+  m_Volume: 1
+  m_Pitch: 1
+  Loop: 0
+  Mute: 0
+  Spatialize: 0
+  SpatializePostEffects: 0
+  Priority: 128
+  DopplerLevel: 1
+  MinDistance: 1
+  MaxDistance: 500
+  Pan2D: 0
+  rolloffMode: 0
+  BypassEffects: 0
+  BypassListenerEffects: 0
+  BypassReverbZones: 0
+  rolloffCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    - serializedVersion: 3
+      time: 1
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  panLevelCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  spreadCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  reverbZoneMixCustomCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+--- !u!114 &1143231921
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1143231915}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a1b2c3d4e5f64789a0b1c2d3e4f50001, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CampusAudioManager
+  masterVolume: 0.55
+  isMuted: 0
+--- !u!114 &1143231923
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1143231915}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a1b2c3d4e5f64789a0b1c2d3e4f50003, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CampusTileInspector
+  board: {fileID: 1369751265}
+  turnManager: {fileID: 1460564089}
+  launcher: {fileID: 1143231920}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
