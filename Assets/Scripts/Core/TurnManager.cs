@@ -103,6 +103,7 @@ namespace CampusTycoon
             if (player.MustSkipNextTurn)
             {
                 player.SetSkipNextTurn(false);
+                CampusEvents.RaiseTurnSkipped(player.Index);
                 Debug.Log($"[Tour] {player.Character.DisplayName} passe son tour.");
                 yield return Pause(player);
                 yield break;
@@ -117,6 +118,7 @@ namespace CampusTycoon
             }
 
             bool firstRoll = true;
+            CampusEvents.RaiseDoubleRolled(player.Index);
             while (true)
             {
                 Phase = TurnPhase.Roll;
@@ -207,6 +209,7 @@ namespace CampusTycoon
                     break;
                 case SquareType.StudentLounge:
                     player.AddMoney(square.Data.Amount);
+                    CampusEvents.RaiseLoungeBonus(player.Index, square.Data.Amount);
                     break;
                 case SquareType.GoToDetention:
                     yield return SendToDetention(player);
@@ -369,6 +372,7 @@ namespace CampusTycoon
             }
             int payout = roulettePayouts[die - 1];
             player.AddMoney(payout);
+            CampusEvents.RaiseRouletteResolved(player.Index, die, payout);
             Debug.Log($"[Roulette] {player.Character.DisplayName} mise {stake}, dé : {die}, gain {payout} (net {payout - stake:+0;-0;0}).");
         }
 
@@ -649,7 +653,11 @@ namespace CampusTycoon
             int raw = player.Position + steps;
             int to = ((raw % n) + n) % n;
             player.SetPosition(to);
-            if (steps > 0 && raw >= n) player.AddMoney(level.PassStartBonus);
+            if (steps > 0 && raw >= n)
+            {
+                player.AddMoney(level.PassStartBonus);
+                CampusEvents.RaisePassedStart(player.Index, level.PassStartBonus);
+            }
             CampusEvents.RaisePlayerMoved(player.Index, to, steps, false);
 
             PawnSplineMover pawn = Pawn(player.Index);
