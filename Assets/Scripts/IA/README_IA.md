@@ -20,6 +20,8 @@ de pouvoir) s'applique ensuite. L'IA ne modifie jamais l'état du jeu : la logiq
 | `AIController.cs` | MonoBehaviour appelé par la machine à états du tour |
 | `AIBarks.cs` | Répliques des IA : textes par personnage et par moment, rythme (C# pur) |
 | `AIBarkController.cs` | Écoute `CampusEvents` et envoie les répliques à la bulle du HUD |
+| `AIDecisionLog.cs` | Journal des dernières décisions de chaque IA (C# pur) |
+| `AIBrainPanel.cs` | Panneau « cerveau de l'IA » : touche [I] en jeu, s'ajoute tout seul |
 | `Editor/AIProfileMenu.cs` | Menu **Campus Tycoon > IA > Créer les profils par défaut** (assets dans `Assets/Data/AI`) |
 
 ## Branchement dans la machine à états du tour
@@ -61,6 +63,14 @@ et l'événement du semestre actif. Tout le reste est lu dans `Player`, `BoardSq
 | Actions facultatives | `DecideUpgrades(snap)` | liste ordonnée de `Upgrade` |
 | Dette > argent | `ChooseAssetsToSell(snap, montantManquant)` | liste ordonnée de `SellUpgrade` / `SellProperty` |
 
+## Panneau « cerveau de l'IA » (soutenance)
+
+En jeu, **[I]** affiche ou masque, pour chaque IA : ses réglages de personnalité (difficulté, chance d'achat,
+réserve, construction) et ses dernières décisions avec leur score et leur justification. Le panneau s'ajoute
+tout seul au lancement (aucune scène à modifier) et ne fait que lire `AIController.DecisionMade` :
+il n'influence jamais la partie. Un rappel « [I] Cerveau de l'IA » apparaît en bas à droite après la
+première décision d'une IA.
+
 ## Répliques des IA
 
 1. Ajouter `AIBarkController` sur un objet de la scène.
@@ -88,7 +98,7 @@ sinon le monopole n'est pas détecté.
 
 ## Tests hors Unity
 
-`Tools/AISimulation` compile ces scripts avec des stubs de UnityEngine, vérifie 77 scénarios (dont le pont avec le modèle) puis simule
+`Tools/AISimulation` compile ces scripts avec des stubs de UnityEngine, vérifie 96 scénarios (dont le pont avec le modèle) puis simule
 des parties entre IA pour régler les coefficients :
 
 ```bash
