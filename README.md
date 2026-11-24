@@ -54,3 +54,4 @@ dotnet run -c Release 200
 - **Modèle & Logique (`Assets/Scripts/Model/`, `Assets/Scripts/Core/`, `Assets/Data/`)** — *Franck* : ScriptableObjects, `GameState`, `RentCalculator`, `TurnManager` et bus d'événements `CampusEvents`.
 - **Vue 3D, UI/HUD, Scènes & Audio (`Assets/Scripts/View/`, `Assets/Scenes/`, `Assets/Materials/`)** — *Mohamed* : génération procédurale du plateau/bâtiments/dés, caméra orbitale, splines, Menu Principal, HUD UGUI, inspecteur de case, audio procédural et packaging Build.
 - **Intelligence Artificielle (`Assets/Scripts/IA/`, `Assets/Data/AI/`, `Tools/AISimulation/`)** — *Malick* : Utility AI (`AIBrain`, `UtilityScorer`, `BoardProbabilities`, `RentEstimator`), pont `AISnapshotBuilder`, répliques `AIBarks`/`AIBarkController` et simulateur de tests.
+
