@@ -15,7 +15,8 @@ namespace CampusTycoon.AI
         SellUpgrade,
         SellProperty,
         PlayRoulette,
-        SkipRoulette
+        SkipRoulette,
+        KeepExemptionTicket
     }
 
     /// <summary>Décision renvoyée par l'IA : action, score et justification courte.</summary>

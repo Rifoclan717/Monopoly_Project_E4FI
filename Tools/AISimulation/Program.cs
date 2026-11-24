@@ -17,6 +17,7 @@ namespace CampusTycoon.AI.Simulation
             bool ok = Scenarios.RunAll();
             ok &= BridgeScenarios.RunAll();
             ok &= BarkScenarios.RunAll();
+            ok &= BrainPanelScenarios.RunAll();
             var sw = Stopwatch.StartNew();
 
             SameDifficulty(games);
