@@ -38,6 +38,9 @@ namespace CampusTycoon
         // Événement du semestre (eventTitle, eventEffectDescription)
         public static event Action<string, string> OnGlobalEventStarted;
 
+        // Fin d'un événement du semestre (eventTitle)
+        public static event Action<string> OnGlobalEventEnded;
+
         // Pouvoir d'étudiant utilisé (playerId, characterName, powerName, powerDescription)
         public static event Action<int, string, string, string> OnPowerUsed;
 
@@ -49,6 +52,12 @@ namespace CampusTycoon
 
         // Entrée ou sortie de colle (playerId, inDetention)
         public static event Action<int, bool> OnDetentionChanged;
+
+        // Étage vendu (playerId, tileIndex, newBuildingLevel 0..2)
+        public static event Action<int, int, int> OnPropertyDowngraded;
+
+        // Terrain vendu à la banque (playerId, tileIndex, amountReceived)
+        public static event Action<int, int, int> OnPropertySold;
 
         // ==================== MÉTHODES D'ÉMISSION (Appels depuis Logique ou Testeur) ====================
 
@@ -78,6 +87,9 @@ namespace CampusTycoon
 
         public static void RaiseGlobalEventStarted(string title, string effect)
             => OnGlobalEventStarted?.Invoke(title, effect);
+        
+        public static void RaiseGlobalEventEnded(string title)
+            => OnGlobalEventEnded?.Invoke(title);
 
         public static void RaisePowerUsed(int playerId, string charName, string powerName, string desc)
             => OnPowerUsed?.Invoke(playerId, charName, powerName, desc);
@@ -90,5 +102,11 @@ namespace CampusTycoon
 
         public static void RaiseDetentionChanged(int playerId, bool inDetention)
             => OnDetentionChanged?.Invoke(playerId, inDetention);
+
+        public static void RaisePropertyDowngraded(int playerId, int tileIndex, int newLevel)
+            => OnPropertyDowngraded?.Invoke(playerId, tileIndex, newLevel);
+
+        public static void RaisePropertySold(int playerId, int tileIndex, int amount)
+            => OnPropertySold?.Invoke(playerId, tileIndex, amount);
     }
 }
