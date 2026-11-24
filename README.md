@@ -46,6 +46,7 @@ dotnet run -c Release 200
 | Inspecter une case (loyers, propriétaire) | — | `Clic gauche` sur n'importe quelle case 3D |
 | Tourner / zoomer / recentrer la caméra | `A` / `Q` / `D` ou `←` / `→` · `R` (recentrer) | `Clic droit + glisser` · `Molette` |
 | Mode Turbo / Son / Aide / Pause | `V` · `M` · `H` · `Échap` | Barre d'outils en haut à droite |
+| Cerveau de l'IA : réglages et dernières décisions des IA, avec score et justification | `I` | — |
 
 ---
 

@@ -1746,7 +1746,7 @@ public class CampusHUDController : MonoBehaviour
             "- Sortir de Colle : [P] Payer 50 € · [B] Billet d'absence · [T] Attendre 1 tour\n" +
             "- Inspecter une case : [Clic gauche] sur n'importe quelle tuile 3D du plateau\n" +
             "- Caméra : [Clic droit + Souris] orbiter · [A / Q / D] ou [Flèches] tourner · [Molette] zoom · [R] recentrer\n" +
-            "- Raccourcis : [V] Mode Turbo · [M] Son ON/OFF · [H] Aide · [Échap] Pause";
+            "- Raccourcis : [V] Mode Turbo · [M] Son ON/OFF · [H] Aide · [I] Cerveau de l'IA (décisions et scores des IA) · [Échap] Pause";
 
         Text body = CreateText("Body", box.transform, rulesText, 16, FontStyle.Normal, ColTextMain, TextAnchor.UpperLeft);
         SetAnchoredRect(body.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0f, -6f), new Vector2(-56f, -150f));

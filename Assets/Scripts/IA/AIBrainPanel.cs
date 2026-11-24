@@ -22,6 +22,8 @@ namespace CampusTycoon.AI
         [Range(1, 10)] [SerializeField] private int decisionsShown = 4;
         [Tooltip("Taille du panneau (1 = taille normale en 1080p)")]
         [Range(0.6f, 2f)] [SerializeField] private float sizeFactor = 1f;
+        [Tooltip("Distance entre le haut de l'écran et le panneau, en pixels pour un écran 1080p (sous la barre d'outils du HUD)")]
+        [Min(0f)] [SerializeField] private float topOffset = 170f;
 
         private static AIBrainPanel instance;
 
@@ -116,7 +118,7 @@ namespace CampusTycoon.AI
 
             float width = 470f * scale;
             float x = Screen.width - width - 14f * scale;
-            float y = 110f * scale;
+            float y = topOffset * scale;
             GUILayout.BeginArea(new Rect(x, y, width, Screen.height - y - 20f * scale));
             GUILayout.BeginVertical(boxStyle);
 
