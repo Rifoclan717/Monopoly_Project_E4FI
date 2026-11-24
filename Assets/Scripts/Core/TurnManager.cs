@@ -149,14 +149,14 @@ namespace CampusTycoon
                 Phase = TurnPhase.Resolve;
                 yield return Resolve(player);
 
-                bool replay = d1 == d2 && firstRoll && !player.InDetention && !player.IsBankrupt;
+                bool replay = d1 == d2 && firstRoll && !player.InDetention && !player.IsBankrupt && !IsGameOver();
                 if (!replay) break;
                 firstRoll = false;
                 Debug.Log($"[Tour] Double : {player.Character.DisplayName} rejoue une fois.");
             }
 
             Phase = TurnPhase.Actions;
-            if (!player.IsBankrupt) yield return DoUpgrades(player);
+            if (!player.IsBankrupt && !IsGameOver()) yield return DoUpgrades(player);
 
             Phase = TurnPhase.End;
             yield return Pause(player);
@@ -583,7 +583,11 @@ namespace CampusTycoon
 
             if (player.IsHuman)
             {
-                string prompt = $"Colle : P = payer {fine}, B = billet d'absence, T = attendre un tour";
+                string prompt = "Colle :";
+                if (player.CanAfford(fine)) prompt += $" P = payer {fine},";
+                if (player.HasExemptionTicket) prompt += " B = billet d'absence,";
+                prompt += " T = attendre un tour";
+
                 Debug.Log($"[Tour] {prompt}");
                 if (hud != null) hud.StartHumanDecisionTimer(prompt);
                 float timeLeft = humanDecisionSeconds;
