@@ -583,7 +583,11 @@ namespace CampusTycoon
 
             if (player.IsHuman)
             {
-                string prompt = $"Colle : P = payer {fine}, B = billet d'absence, T = attendre un tour";
+                string prompt = "Colle :";
+                if (player.CanAfford(fine)) prompt += $" P = payer {fine},";
+                if (player.HasExemptionTicket) prompt += " B = billet d'absence,";
+                prompt += " T = attendre un tour";
+
                 Debug.Log($"[Tour] {prompt}");
                 if (hud != null) hud.StartHumanDecisionTimer(prompt);
                 float timeLeft = humanDecisionSeconds;
