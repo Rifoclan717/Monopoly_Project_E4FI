@@ -272,7 +272,7 @@ namespace CampusTycoon
                     break;
 
                 case CardEffect.PayMoney:
-                    Pay(player, card.Amount, GameState.BankIndex);
+                    yield return Pay(player, card.Amount, GameState.BankIndex);
                     break;
 
                 case CardEffect.MoveSteps:
@@ -291,7 +291,7 @@ namespace CampusTycoon
 
                 case CardEffect.CollectFromEachRival:
                     foreach (Player rival in State.ActivePlayers.ToList())
-                        if (rival.Index != player.Index) Pay(rival, card.Amount, player.Index);
+                        if (rival.Index != player.Index) yield return Pay(rival, card.Amount, player.Index);
                     break;
 
                 case CardEffect.SkipNextTurn:
@@ -411,7 +411,7 @@ namespace CampusTycoon
                 new PowerContext { Moment = PowerMoment.PayingTax, Amount = amount },
                 $"Soirée mémorable : annuler la taxe de {amount} ? O = oui, N = non", r => used = r);
             if (used) yield break;
-            Pay(player, amount, GameState.BankIndex);
+            yield return Pay(player, amount, GameState.BankIndex);
         }
 
         private IEnumerator PayRent(Player tenant, BoardSquare square)
@@ -450,7 +450,7 @@ namespace CampusTycoon
                 $"Soirée mémorable : annuler le loyer de {rent} ? O = oui, N = non", r => used = r);
             if (used) yield break;
 
-            Pay(tenant, rent, owner.Index);
+            yield return Pay(tenant, rent, owner.Index);
             CampusEvents.RaiseRentPaid(tenant.Index, owner.Index, square.Index, rent);
             Debug.Log($"[Loyer] {tenant.Character.DisplayName} paie {rent} à {owner.Character.DisplayName} ({square.Data.DisplayName}).");
         }
@@ -458,11 +458,11 @@ namespace CampusTycoon
         //Argent, ventes et faillite
 
         /// <summary>creditor = index du joueur payé, ou GameState.BankIndex. Vend des biens si l'argent manque.</summary>
-        private void Pay(Player payer, int amount, int creditor)
+        private IEnumerator Pay(Player payer, int amount, int creditor)
         {
-            if (amount <= 0) return;
-            if (!payer.CanAfford(amount)) RaiseCash(payer, amount);
-            if (!payer.CanAfford(amount)) { Bankrupt(payer, creditor); return; }
+            if (amount <= 0) yield break;
+            if (!payer.CanAfford(amount)) yield return RaiseCash(payer, amount);
+            if (!payer.CanAfford(amount)) { Bankrupt(payer, creditor); yield break; }
 
             payer.RemoveMoney(amount);
             if (creditor != GameState.BankIndex) State.Players[creditor].AddMoney(amount);
@@ -472,18 +472,36 @@ namespace CampusTycoon
         /// Vend des biens à 50 % jusqu'à pouvoir payer amountDue. IA : son plan (ChooseAssetsToSell).
         /// Humain : vente automatique de ce qui vaut le moins, en attendant un écran de vente.
         /// </summary>
-        private void RaiseCash(Player player, int amountDue)
+        private IEnumerator RaiseCash(Player player, int amountDue)
         {
             if (!player.IsHuman)
             {
                 int missing = amountDue - player.Money;
                 foreach (AIDecision d in ai[player.Index].ChooseAssetsToSell(Snapshot(), missing))
                 {
-                    if (player.CanAfford(amountDue)) return;
+                    if (player.CanAfford(amountDue)) yield break;
                     BoardSquare s = State.Board[d.Square];
                     if (s.OwnerIndex != player.Index) continue;
                     if (d.Action == AIActionType.SellUpgrade && s.UpgradeLevel > 0) SellUpgrade(player, s);
                     else if (d.Action == AIActionType.SellProperty && s.UpgradeLevel == 0) SellProperty(player, s);
+                }
+            }
+
+            if (player.IsHuman)
+            {
+                while (!player.CanAfford(amountDue))
+                {
+                    List<BoardSquare> assets = State.OwnedBy(player.Index)
+                        .OrderBy(s => s.UpgradeLevel > 0 ? 0 : 1).ThenBy(s => s.Data.Price).Take(9).ToList();
+                    if (assets.Count == 0) break;
+                            List<string> labels = assets.Select(s => s.UpgradeLevel > 0
+                                ? $"étage de {s.Data.DisplayName} (+{s.Data.UpgradeCost / 2})"
+                                : $"{s.Data.DisplayName} (+{s.Data.Price / 2})").ToList();
+                            int pick = 0;
+                            yield return AskChoice($"Il vous manque {amountDue - player.Money} : vendez un bien.", labels, n => pick = n);
+                            BoardSquare chosen = assets[pick];
+                            if (chosen.UpgradeLevel > 0) SellUpgrade(player, chosen);
+                            else SellProperty(player, chosen);
                 }
             }
 
@@ -495,7 +513,7 @@ namespace CampusTycoon
                 if (upgrade != null) { SellUpgrade(player, upgrade); continue; }
 
                 BoardSquare property = State.OwnedBy(player.Index).OrderBy(s => s.Data.Price).FirstOrDefault();
-                if (property == null) return; // plus rien à vendre
+                if (property == null) yield break; // plus rien à vendre
                 SellProperty(player, property);
             }
         }
