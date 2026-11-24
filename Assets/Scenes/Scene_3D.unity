@@ -21020,7 +21020,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 096d8cfa8ef47dd48a594db928c1f609, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ProceduralBoardGenerator
-  levelData: {fileID: 0}
+  levelData: {fileID: 11400000, guid: 3bc9194099c178947b653cd04daf73e3, type: 2}
   campusLevel: 3
   previewBuildingLevel: 0
   livelyCampusShowcase: 0
@@ -21030,7 +21030,7 @@ MonoBehaviour:
   tileHeight: 0.25
   tileGap: 0.08
   buildingPrefab: {fileID: 0}
-  sharedBoardMaterial: {fileID: 1445066828}
+  sharedBoardMaterial: {fileID: 2100000, guid: 7f8a9b1c2d3e4f50a6b7c8d9e0f1a2b3, type: 2}
   cameraTargetToCenter: {fileID: 2084254594}
   studentPawns: []
   generatedTiles:

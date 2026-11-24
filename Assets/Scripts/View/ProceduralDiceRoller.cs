@@ -1,21 +1,22 @@
 using System;
 using System.Collections;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 
 public class ProceduralDiceRoller : MonoBehaviour
 {
     [Header("Paramètres Campus Tycoon (<= 2 secondes, ignorable)")]
     [Tooltip("Durée du lancer (Règle Campus Tycoon : 2 secondes maximum)")]
-    [Range(0.4f, 2.0f)] public float rollDuration = 1.35f;
+    [Range(0.4f, 2.0f)] public float rollDuration = 1.50f;
     public float throwArcHeight = 2.4f;
-    public float diceScale = 0.65f;
-    public Vector3 centerTableOffset = new Vector3(0f, 0.45f, 0f);
+    public float diceScale = 0.68f;
+    public Vector3 centerTableOffset = new Vector3(0f, 0.58f, 0f);
 
     [Header("Vitesse d'Animation (1x = Humain, 2x+ = Tours IA / Turbo)")]
     [Range(0.5f, 10f)] public float speedMultiplier = 1f;
 
-    [Header("Matériau Partagé (Auto-géré si vide)")]
+    [Header("Matériau Partagé (Mat_Campus_URP recommandé pour Build .exe)")]
     public Material sharedDiceMaterial;
 
     public bool IsRolling { get; private set; }
@@ -45,8 +46,11 @@ public class ProceduralDiceRoller : MonoBehaviour
 
     void Update()
     {
-        // Règle Campus Tycoon : animation de lancer ignorable d'un clic
-        if (IsRolling && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+        // Règle Campus Tycoon : animation de lancer ignorable d'un clic hors boutons UI
+        if (IsRolling &&
+            Mouse.current != null &&
+            Mouse.current.leftButton.wasPressedThisFrame &&
+            (EventSystem.current == null || !EventSystem.current.IsPointerOverGameObject()))
         {
             SkipRollAnimation();
         }
@@ -55,6 +59,18 @@ public class ProceduralDiceRoller : MonoBehaviour
     public Material EnsureValidDiceMaterial()
     {
         if (sharedDiceMaterial != null) return sharedDiceMaterial;
+
+        // Réutilise le matériau sérialisé du plateau (garanti présent en Build Standalone .exe)
+        ProceduralBoardGenerator board = FindFirstObjectByType<ProceduralBoardGenerator>();
+        if (board != null)
+        {
+            Material boardMat = board.EnsureValidMaterial();
+            if (boardMat != null)
+            {
+                sharedDiceMaterial = boardMat;
+                return sharedDiceMaterial;
+            }
+        }
 
         Shader shader = Shader.Find("Universal Render Pipeline/Lit");
         if (shader == null) shader = Shader.Find("Universal Render Pipeline/Simple Lit");
@@ -93,6 +109,12 @@ public class ProceduralDiceRoller : MonoBehaviour
         die1Value = Mathf.Clamp(die1Value, 1, 6);
         die2Value = Mathf.Clamp(die2Value, 1, 6);
 
+        if (singleDieMode)
+        {
+            ProceduralBoardGenerator board = FindFirstObjectByType<ProceduralBoardGenerator>();
+            if (board != null) board.SpinRouletteWheelVisual(rollDuration / Mathf.Max(0.5f, speedMultiplier));
+        }
+
         if (rollCoroutine != null) StopCoroutine(rollCoroutine);
         rollCoroutine = StartCoroutine(RollDiceCoroutine(die1Value, die2Value, singleDieMode, onRollCompleted));
     }
@@ -109,14 +131,12 @@ public class ProceduralDiceRoller : MonoBehaviour
         Vector3 start1 = center + new Vector3(-1.8f, 1.8f, -2.2f);
         Vector3 start2 = center + new Vector3(1.8f, 1.8f, -2.2f);
 
-        Vector3 end1 = singleDie ? center : center + new Vector3(-0.65f, 0f, 0f);
-        Vector3 end2 = center + new Vector3(0.65f, 0f, 0f);
+        Vector3 end1 = singleDie ? center : center + new Vector3(-0.70f, 0f, 0f);
+        Vector3 end2 = center + new Vector3(0.70f, 0f, 0f);
 
-        // Rotation finale exacte par produit de Quaternions (Yaw aléatoire sur Y * Face cible vers le haut)
         Quaternion finalRot1 = Quaternion.AngleAxis(UnityEngine.Random.Range(0f, 360f), Vector3.up) * FaceUpRotations[val1];
         Quaternion finalRot2 = Quaternion.AngleAxis(UnityEngine.Random.Range(0f, 360f), Vector3.up) * FaceUpRotations[val2];
 
-        // Axes de rotation rapides pendant le vol
         Vector3 spinAxis1 = new Vector3(1f, 0.7f, 0.4f).normalized;
         Vector3 spinAxis2 = new Vector3(-0.6f, 1f, -0.5f).normalized;
 
@@ -128,7 +148,6 @@ public class ProceduralDiceRoller : MonoBehaviour
             elapsed += Time.deltaTime;
             float t = Mathf.Clamp01(elapsed / effectiveDuration);
 
-            // Trajectoire avec rebond amorti au sol
             float bounceOffset = ComputeDiceBounceHeight(t) * throwArcHeight;
 
             die1Transform.position = Vector3.Lerp(start1, end1, t) + Vector3.up * bounceOffset;
@@ -137,7 +156,6 @@ public class ProceduralDiceRoller : MonoBehaviour
                 die2Transform.position = Vector3.Lerp(start2, end2, t) + Vector3.up * bounceOffset;
             }
 
-            // Interpolation par Quaternions : tourbillon rapide au début, verrouillage Slerp sur la bonne face à la fin
             float spinAngle = (1f - t) * (1f - t) * 1080f;
             Quaternion spinQuat1 = Quaternion.AngleAxis(spinAngle, spinAxis1);
             Quaternion spinQuat2 = Quaternion.AngleAxis(spinAngle, spinAxis2);
@@ -151,7 +169,6 @@ public class ProceduralDiceRoller : MonoBehaviour
             yield return null;
         }
 
-        // Ancrage final exact (garantit la bonne face même si l'animation est ignorée)
         die1Transform.position = end1;
         die1Transform.rotation = finalRot1;
 
@@ -168,7 +185,6 @@ public class ProceduralDiceRoller : MonoBehaviour
 
     private float ComputeDiceBounceHeight(float t)
     {
-        // Premier grand arc (0 -> 0.65), puis petit rebond sur le plateau (0.65 -> 1.0)
         if (t < 0.65f)
         {
             float nt = t / 0.65f;
@@ -187,28 +203,27 @@ public class ProceduralDiceRoller : MonoBehaviour
         if (die2Transform == null) die2Transform = CreateProceduralDie("Die_2");
     }
 
-    /// <summary>
-    /// Construit procéduralement un dé 3D avec ses points (1 à 6) sur chaque face.
-    /// </summary>
     private Transform CreateProceduralDie(string dieName)
     {
         Transform existing = transform.Find(dieName);
-        if (existing != null) return existing;
+        if (existing != null)
+        {
+            ApplyMaterialToHierarchy(existing);
+            return existing;
+        }
 
         GameObject dieRoot = GameObject.CreatePrimitive(PrimitiveType.Cube);
         dieRoot.name = dieName;
         dieRoot.transform.SetParent(transform, false);
         dieRoot.transform.localScale = Vector3.one * diceScale;
 
-        // Désactive le collider pour ne pas gêner les pions ni la caméra
         Collider c = dieRoot.GetComponent<Collider>();
         if (c != null) c.enabled = false;
 
         MeshRenderer mr = dieRoot.GetComponent<MeshRenderer>();
         if (sharedDiceMaterial != null) mr.sharedMaterial = sharedDiceMaterial;
-        ApplyColorBlock(mr, new Color(0.98f, 0.97f, 0.94f)); // Blanc ivoire
+        ApplyColorBlock(mr, new Color(0.98f, 0.97f, 0.94f));
 
-        // Placement des points (pips) sur les 6 faces conformément à FaceUpRotations :
         // +Y = 1, -Y = 6, +Z = 2, -Z = 5, +X = 3, -X = 4
         AddFacePips(dieRoot.transform, Vector3.up, Vector3.forward, Vector3.right, 1);
         AddFacePips(dieRoot.transform, Vector3.down, Vector3.forward, Vector3.left, 6);
@@ -218,6 +233,19 @@ public class ProceduralDiceRoller : MonoBehaviour
         AddFacePips(dieRoot.transform, Vector3.left, Vector3.up, Vector3.forward, 4);
 
         return dieRoot.transform;
+    }
+
+    private void ApplyMaterialToHierarchy(Transform root)
+    {
+        if (sharedDiceMaterial == null || root == null) return;
+        MeshRenderer[] renderers = root.GetComponentsInChildren<MeshRenderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            if (renderers[i].sharedMaterial == null)
+            {
+                renderers[i].sharedMaterial = sharedDiceMaterial;
+            }
+        }
     }
 
     private void AddFacePips(Transform die, Vector3 normal, Vector3 upAxis, Vector3 rightAxis, int value)
@@ -244,12 +272,11 @@ public class ProceduralDiceRoller : MonoBehaviour
             if (col != null) col.enabled = false;
 
             pip.transform.localPosition = normal * 0.505f + rightAxis * off.x + upAxis * off.y;
-            pip.transform.localScale = new Vector3(0.14f, 0.14f, 0.14f);
+            pip.transform.localScale = new Vector3(0.15f, 0.15f, 0.15f);
 
             MeshRenderer mr = pip.GetComponent<MeshRenderer>();
             if (sharedDiceMaterial != null) mr.sharedMaterial = sharedDiceMaterial;
-            // Point rouge pour l'As (1), noir pour les autres faces
-            ApplyColorBlock(mr, value == 1 ? new Color(0.85f, 0.15f, 0.15f) : new Color(0.10f, 0.10f, 0.12f));
+            ApplyColorBlock(mr, value == 1 ? new Color(0.85f, 0.15f, 0.15f) : new Color(0.08f, 0.08f, 0.10f));
         }
     }
 

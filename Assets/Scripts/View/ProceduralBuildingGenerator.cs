@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -33,14 +34,14 @@ public class ProceduralBuildingGenerator : MonoBehaviour
     [Min(0.3f)] public float floorHeight = 0.55f;
     [Min(0.2f)] public float roofHeight = 0.45f;
 
-    [Header("Palette de Couleurs (Modifiable)")]
+    [Header("Palette de Couleurs (Synchronisée avec le Plateau / Personnages)")]
     public Color wallColor = new Color(0.95f, 0.93f, 0.88f); // Pierre claire universitaire
     public Color unownedRoofColor = new Color(0.32f, 0.35f, 0.40f); // Ardoise neutre
     public Color[] playerOwnerColors = new Color[]
     {
-        new Color(0.18f, 0.52f, 0.95f), // ID 0 : Étudiant Joueur (Bleu vif)
-        new Color(0.90f, 0.22f, 0.25f), // ID 1 : Rival IA 1 (Rouge)
-        new Color(0.20f, 0.78f, 0.42f)  // ID 2 : Rival IA 2 (Vert)
+        new Color(0.18f, 0.52f, 0.95f), // ID 0 : Joueur 0
+        new Color(0.90f, 0.22f, 0.25f), // ID 1 : Joueur 1
+        new Color(0.20f, 0.78f, 0.42f)  // ID 2 : Joueur 2
     };
 
     [Header("Options Techniques")]
@@ -60,8 +61,8 @@ public class ProceduralBuildingGenerator : MonoBehaviour
     private MeshCollider meshCollider;
     private MaterialPropertyBlock propBlock;
     private Color customGroupColorOverride = Color.clear;
+    private Coroutine popCoroutine;
 
-    // Identifiants Shaders (URP et Built-in Standard)
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
     private static readonly int ColorId = Shader.PropertyToID("_Color");
 
@@ -74,6 +75,20 @@ public class ProceduralBuildingGenerator : MonoBehaviour
     {
         customGroupColorOverride = Color.clear;
         RebuildMesh();
+    }
+
+    /// <summary>
+    /// Synchronise la palette de couleurs des propriétaires avec les personnages actifs de la partie.
+    /// </summary>
+    public void ApplyPlayerPalette(Color[] palette)
+    {
+        if (palette == null || palette.Length == 0) return;
+        playerOwnerColors = new Color[palette.Length];
+        for (int i = 0; i < palette.Length; i++)
+        {
+            playerOwnerColors[i] = palette[i];
+        }
+        ApplyVisualColors();
     }
 
     /// <summary>
@@ -99,13 +114,49 @@ public class ProceduralBuildingGenerator : MonoBehaviour
     /// <summary>
     /// Surcharge pratique utilisant directement l'énumération des groupes de Campus Tycoon.
     /// </summary>
-    public void SetCampusBuildingState(int level, int newOwnerId, CampusGroup group)
+    public void SetCampusBuildingState(int level, int newOwnerId, CampusGroup group, bool playPopAnimation = false)
     {
         buildingLevel = Mathf.Clamp(level, 0, 3);
         ownerId = Mathf.Clamp(newOwnerId, -1, 2);
         campusGroup = group;
         customGroupColorOverride = Color.clear;
         RebuildMesh();
+
+        if (playPopAnimation && Application.isPlaying && gameObject.activeInHierarchy)
+        {
+            PlayBuildPopAnimation();
+        }
+    }
+
+    /// <summary>
+    /// Animation élastique courte de construction / achat sur l'axe vertical.
+    /// </summary>
+    public void PlayBuildPopAnimation()
+    {
+        if (!Application.isPlaying || !gameObject.activeInHierarchy) return;
+        if (popCoroutine != null) StopCoroutine(popCoroutine);
+        popCoroutine = StartCoroutine(PopScaleCoroutine());
+    }
+
+    private IEnumerator PopScaleCoroutine()
+    {
+        float duration = 0.32f;
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            // Overshoot doux (easeOutBack)
+            float c1 = 1.70158f;
+            float c3 = c1 + 1f;
+            float scaleY = 1f + c3 * Mathf.Pow(t - 1f, 3f) + c1 * Mathf.Pow(t - 1f, 2f);
+            scaleY = Mathf.Clamp(scaleY, 0.25f, 1.25f);
+            float scaleXZ = Mathf.Lerp(0.88f, 1f, t);
+            transform.localScale = new Vector3(scaleXZ, scaleY, scaleXZ);
+            yield return null;
+        }
+        transform.localScale = Vector3.one;
+        popCoroutine = null;
     }
 
     /// <summary>
@@ -141,16 +192,15 @@ public class ProceduralBuildingGenerator : MonoBehaviour
             float slabTop = foundationHeight + 0.03f;
             AddBox(Vector3.zero, baseWidth * 0.82f, baseDepth * 0.82f, foundationHeight, slabTop, trisWalls);
 
-            // Tâche 3 : Si le terrain est acheté sans amélioration (ownerId >= 0),
-            // afficher clairement la couleur du propriétaire (bordure encadrante + borne/enseigne sur trisRoofOwner)
+            // Si le terrain est acheté sans amélioration (ownerId >= 0),
+            // afficher clairement la couleur du propriétaire (bordure encadrante + borne/enseigne)
             if (ownerId >= 0)
             {
-                float borderW = baseWidth * 0.86f;
-                float borderD = baseDepth * 0.86f;
-                float borderThickness = Mathf.Min(baseWidth, baseDepth) * 0.10f;
-                float borderYMax = slabTop + 0.06f;
+                float borderW = baseWidth * 0.88f;
+                float borderD = baseDepth * 0.88f;
+                float borderThickness = Mathf.Min(baseWidth, baseDepth) * 0.11f;
+                float borderYMax = slabTop + 0.07f;
 
-                // 4 bordures aux couleurs du propriétaire autour de la parcelle
                 float halfZ = (borderD - borderThickness) * 0.5f;
                 float halfX = (borderW - borderThickness) * 0.5f;
                 AddBox(new Vector3(0f, 0f, -halfZ), borderW, borderThickness, foundationHeight, borderYMax, trisRoofOwner);
@@ -160,9 +210,9 @@ public class ProceduralBuildingGenerator : MonoBehaviour
 
                 // Borne / panneau de propriété au centre-arrière de la parcelle
                 Vector3 signPos = new Vector3(0f, 0f, borderD * 0.18f);
-                AddBox(signPos, borderW * 0.12f, borderD * 0.12f, slabTop, slabTop + 0.22f, trisWalls);
-                AddBox(signPos, borderW * 0.42f, borderD * 0.22f, slabTop + 0.20f, slabTop + 0.30f, trisRoofOwner);
-                AddPitchedRoof(signPos, borderW * 0.46f, borderD * 0.26f, slabTop + 0.30f, slabTop + 0.40f, trisRoofOwner);
+                AddBox(signPos, borderW * 0.12f, borderD * 0.12f, slabTop, slabTop + 0.24f, trisWalls);
+                AddBox(signPos, borderW * 0.46f, borderD * 0.24f, slabTop + 0.22f, slabTop + 0.34f, trisRoofOwner);
+                AddPitchedRoof(signPos, borderW * 0.50f, borderD * 0.28f, slabTop + 0.34f, slabTop + 0.44f, trisRoofOwner);
             }
         }
         else if (buildingLevel == 1)
@@ -172,17 +222,14 @@ public class ProceduralBuildingGenerator : MonoBehaviour
             float d = baseDepth * 0.72f;
             float yTop = foundationHeight + floorHeight;
 
-            // Corps 1 étage
             AddBox(Vector3.zero, w, d, foundationHeight, yTop, trisWalls);
 
-            // Petit porche d'entrée à l'avant (-Z)
             float porchW = w * 0.38f;
             float porchD = d * 0.22f;
             Vector3 porchCenter = new Vector3(0f, 0f, -(d * 0.5f + porchD * 0.45f));
             AddBox(porchCenter, porchW, porchD, foundationHeight, foundationHeight + floorHeight * 0.65f, trisWalls);
             AddPitchedRoof(porchCenter, porchW * 1.15f, porchD * 1.15f, foundationHeight + floorHeight * 0.65f, foundationHeight + floorHeight * 0.88f, trisRoofOwner);
 
-            // Toit principal
             AddPitchedRoof(Vector3.zero, w * 1.14f, d * 1.14f, yTop, yTop + roofHeight, trisRoofOwner);
         }
         else if (buildingLevel == 2)
@@ -192,15 +239,12 @@ public class ProceduralBuildingGenerator : MonoBehaviour
             float mainD = baseDepth * 0.76f;
             float yTopMain = foundationHeight + (floorHeight * 1.85f);
 
-            // Corps principal décalé légèrement à gauche
             Vector3 mainCenter = new Vector3(-baseWidth * 0.12f, 0f, 0f);
             AddBox(mainCenter, mainW, mainD, foundationHeight, yTopMain, trisWalls);
             AddPitchedRoof(mainCenter, mainW * 1.14f, mainD * 1.14f, yTopMain, yTopMain + roofHeight, trisRoofOwner);
 
-            // Bandeau horizontal du groupe entre le 1er et le 2e étage
             AddBox(mainCenter, mainW * 1.04f, mainD * 1.04f, foundationHeight + floorHeight * 0.9f, foundationHeight + floorHeight * 1.0f, trisSocleGroup);
 
-            // Aile latérale droite (1.3 étage)
             float wingW = baseWidth * 0.38f;
             float wingD = baseDepth * 0.58f;
             float yTopWing = foundationHeight + (floorHeight * 1.25f);
@@ -209,7 +253,6 @@ public class ProceduralBuildingGenerator : MonoBehaviour
             AddBox(wingCenter, wingW, wingD, foundationHeight, yTopWing, trisWalls);
             AddPitchedRoof(wingCenter, wingW * 1.14f, wingD * 1.14f, yTopWing, yTopWing + (roofHeight * 0.8f), trisRoofOwner);
 
-            // Cheminée sur le corps principal
             Vector3 chimneyPos = mainCenter + new Vector3(-mainW * 0.28f, 0f, mainD * 0.22f);
             AddBox(chimneyPos, 0.18f, 0.18f, yTopMain + roofHeight * 0.2f, yTopMain + roofHeight * 1.15f, trisWalls);
         }
@@ -221,32 +264,24 @@ public class ProceduralBuildingGenerator : MonoBehaviour
             float h1 = foundationHeight + (floorHeight * 1.35f);
             float h2 = h1 + (floorHeight * 1.15f);
 
-            // Premier niveau large
             AddBox(Vector3.zero, mainW, mainD, foundationHeight, h1, trisWalls);
-
-            // Corniche de couleur du groupe entre les deux niveaux
             AddBox(Vector3.zero, mainW * 1.05f, mainD * 1.05f, h1, h1 + 0.08f, trisSocleGroup);
 
-            // Second niveau en léger retrait (Pavillon supérieur)
             float upperW = mainW * 0.78f;
             float upperD = mainD * 0.78f;
             AddBox(Vector3.zero, upperW, upperD, h1 + 0.08f, h2, trisWalls);
 
-            // Avant-corps monumental (Entrée d'Amphi)
             Vector3 frontCenter = new Vector3(0f, 0f, -(mainD * 0.5f + 0.10f));
             AddBox(frontCenter, mainW * 0.42f, 0.22f, foundationHeight, h2 + 0.05f, trisWalls);
             AddPitchedRoof(frontCenter, mainW * 0.48f, 0.28f, h2 + 0.05f, h2 + roofHeight * 0.75f, trisRoofOwner);
 
-            // Grand toit mansardé (Pyramide tronquée)
             AddMansardRoof(Vector3.zero, upperW * 1.12f, upperD * 1.12f, upperW * 0.55f, upperD * 0.55f, h2, h2 + roofHeight * 1.15f, trisRoofOwner);
 
-            // Clocheton / Flèche centrale d'excellence au sommet de l'Amphi
             float spireBaseY = h2 + roofHeight * 1.15f;
             AddBox(Vector3.zero, upperW * 0.22f, upperD * 0.22f, spireBaseY, spireBaseY + 0.22f, trisWalls);
             AddPyramidSpire(Vector3.zero, upperW * 0.26f, upperD * 0.26f, spireBaseY + 0.22f, spireBaseY + 0.22f + roofHeight * 0.95f, trisRoofOwner);
         }
 
-        // Assemblage du Mesh à 3 sous-maillages
         generatedMesh.SetVertices(vertices);
         generatedMesh.SetUVs(0, uvs);
         generatedMesh.subMeshCount = 3;
@@ -269,9 +304,6 @@ public class ProceduralBuildingGenerator : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Duplique automatiquement la référence du matériau unique sur les 3 slots de sous-maillages.
-    /// </summary>
     private void EnsureThreeMaterialSlots()
     {
         if (meshRenderer == null || meshRenderer.sharedMaterial == null) return;
@@ -285,9 +317,6 @@ public class ProceduralBuildingGenerator : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Applique les couleurs via MaterialPropertyBlock sur chaque sous-maillage (0 = Groupe, 1 = Murs, 2 = Propriétaire).
-    /// </summary>
     public void ApplyVisualColors()
     {
         if (meshRenderer == null) meshRenderer = GetComponent<MeshRenderer>();
@@ -305,11 +334,8 @@ public class ProceduralBuildingGenerator : MonoBehaviour
             roofCol = playerOwnerColors[ownerId];
         }
 
-        // Submesh 0 : Socle & Bandeau (Couleur du groupe de terrain)
         SetSubmeshColor(0, groupCol);
-        // Submesh 1 : Murs (Pierre claire)
         SetSubmeshColor(1, wallColor);
-        // Submesh 2 : Toiture / Bordure propriétaire (Couleur de l'étudiant propriétaire)
         SetSubmeshColor(2, roofCol);
     }
 
@@ -318,8 +344,8 @@ public class ProceduralBuildingGenerator : MonoBehaviour
         if (submeshIndex >= meshRenderer.sharedMaterials.Length) return;
 
         meshRenderer.GetPropertyBlock(propBlock, submeshIndex);
-        propBlock.SetColor(BaseColorId, color); // Compatible URP
-        propBlock.SetColor(ColorId, color);     // Compatible Built-in Standard
+        propBlock.SetColor(BaseColorId, color);
+        propBlock.SetColor(ColorId, color);
         meshRenderer.SetPropertyBlock(propBlock, submeshIndex);
     }
 
@@ -346,15 +372,10 @@ public class ProceduralBuildingGenerator : MonoBehaviour
         float cx = center.x;
         float cz = center.z;
 
-        // Avant (-Z)
         AddQuad(new Vector3(cx - hw, yMin, cz - hd), new Vector3(cx - hw, yMax, cz - hd), new Vector3(cx + hw, yMax, cz - hd), new Vector3(cx + hw, yMin, cz - hd), targetTris);
-        // Arrière (+Z)
         AddQuad(new Vector3(cx + hw, yMin, cz + hd), new Vector3(cx + hw, yMax, cz + hd), new Vector3(cx - hw, yMax, cz + hd), new Vector3(cx - hw, yMin, cz + hd), targetTris);
-        // Gauche (-X)
         AddQuad(new Vector3(cx - hw, yMin, cz + hd), new Vector3(cx - hw, yMax, cz + hd), new Vector3(cx - hw, yMax, cz - hd), new Vector3(cx - hw, yMin, cz - hd), targetTris);
-        // Droite (+X)
         AddQuad(new Vector3(cx + hw, yMin, cz - hd), new Vector3(cx + hw, yMax, cz - hd), new Vector3(cx + hw, yMax, cz + hd), new Vector3(cx + hw, yMin, cz + hd), targetTris);
-        // Dessus (+Y)
         AddQuad(new Vector3(cx - hw, yMax, cz - hd), new Vector3(cx - hw, yMax, cz + hd), new Vector3(cx + hw, yMax, cz + hd), new Vector3(cx + hw, yMax, cz - hd), targetTris);
     }
 
@@ -368,11 +389,9 @@ public class ProceduralBuildingGenerator : MonoBehaviour
         Vector3 ridgeL = new Vector3(cx - hw, yRidge, cz);
         Vector3 ridgeR = new Vector3(cx + hw, yRidge, cz);
 
-        // Pentes Avant et Arrière (Toiture -> Submesh Propriétaire)
         AddQuad(new Vector3(cx - hw, yBase, cz - hd), ridgeL, ridgeR, new Vector3(cx + hw, yBase, cz - hd), targetTris);
         AddQuad(new Vector3(cx + hw, yBase, cz + hd), ridgeR, ridgeL, new Vector3(cx - hw, yBase, cz + hd), targetTris);
 
-        // Pignons Gauche et Droit (Murs -> Submesh Pierre)
         AddTriangle(new Vector3(cx - hw, yBase, cz + hd), ridgeL, new Vector3(cx - hw, yBase, cz - hd), trisWalls);
         AddTriangle(new Vector3(cx + hw, yBase, cz - hd), ridgeR, new Vector3(cx + hw, yBase, cz + hd), trisWalls);
     }
@@ -383,13 +402,11 @@ public class ProceduralBuildingGenerator : MonoBehaviour
         float hwt = wTop * 0.5f, hdt = dTop * 0.5f;
         float cx = center.x, cz = center.z;
 
-        // 4 pans inclinés trapézoïdaux
         AddQuad(new Vector3(cx - hwb, yBot, cz - hdb), new Vector3(cx - hwt, yTop, cz - hdt), new Vector3(cx + hwt, yTop, cz - hdt), new Vector3(cx + hwb, yBot, cz - hdb), targetTris);
         AddQuad(new Vector3(cx + hwb, yBot, cz + hdb), new Vector3(cx + hwt, yTop, cz + hdt), new Vector3(cx - hwt, yTop, cz + hdt), new Vector3(cx - hwb, yBot, cz + hdb), targetTris);
         AddQuad(new Vector3(cx - hwb, yBot, cz + hdb), new Vector3(cx - hwt, yTop, cz + hdt), new Vector3(cx - hwt, yTop, cz - hdt), new Vector3(cx - hwb, yBot, cz - hdb), targetTris);
         AddQuad(new Vector3(cx + hwb, yBot, cz - hdb), new Vector3(cx + hwt, yTop, cz - hdt), new Vector3(cx + hwt, yTop, cz + hdt), new Vector3(cx + hwb, yBot, cz + hdb), targetTris);
 
-        // Terrasse supérieure du toit mansardé
         AddQuad(new Vector3(cx - hwt, yTop, cz - hdt), new Vector3(cx - hwt, yTop, cz + hdt), new Vector3(cx + hwt, yTop, cz + hdt), new Vector3(cx + hwt, yTop, cz - hdt), targetTris);
     }
 
