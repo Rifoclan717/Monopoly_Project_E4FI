@@ -218,12 +218,12 @@ MonoBehaviour:
   targetOffset: {x: 0, y: 0.5, z: 0}
   mouseSensitivity: 18
   keyboardYawSpeed: 90
-  minPitchAngle: 15
-  maxPitchAngle: 85
+  minPitchAngle: 18
+  maxPitchAngle: 84
   rotationSmoothing: 12
-  defaultDistance: 15
-  minZoomDistance: 5
-  maxZoomDistance: 25
+  defaultDistance: 20
+  minZoomDistance: 6
+  maxZoomDistance: 36
   zoomStep: 2.5
   zoomSmoothing: 10
   enableCollision: 1

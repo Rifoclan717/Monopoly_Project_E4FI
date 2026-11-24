@@ -29,11 +29,18 @@ public class ProceduralTileView : MonoBehaviour
     public Transform[] pawnSlots = new Transform[3];
     public Transform[] collePrisonSlots = new Transform[3];
 
+    [Header("Marqueurs Spéciaux (Gares / Compagnie / Roulette / Sélection)")]
+    public GameObject specialOwnerMarkerRoot;
+    public MeshRenderer[] specialOwnerRenderers = new MeshRenderer[0];
+    public Transform rouletteWheelTransform;
+
     private Mesh tileMesh;
     private MeshFilter meshFilter;
     private MeshRenderer meshRenderer;
     private MaterialPropertyBlock propBlock;
     private TextMesh labelTextMesh;
+    private GameObject highlightFrame;
+    private bool isHighlighted;
 
     private readonly List<Vector3> vertices = new List<Vector3>();
     private readonly List<Vector2> uvs = new List<Vector2>();
@@ -71,10 +78,148 @@ public class ProceduralTileView : MonoBehaviour
         BuildProceduralTileMesh(width, depth, height);
         ApplyTileColors();
         SetupAnchorsAndLabel(width, depth, height);
+        SetupHighlightIndicator(width, depth, height, sharedMat);
 
         BoxCollider col = GetComponent<BoxCollider>();
-        col.size = new Vector3(width, height, depth);
-        col.center = new Vector3(0f, height * 0.5f, 0f);
+        col.size = new Vector3(width, height + 0.1f, depth);
+        col.center = new Vector3(0f, (height + 0.1f) * 0.5f, 0f);
+    }
+
+    /// <summary>
+    /// Crée un marqueur visuel de propriété (bordure + fanion) pour les Gares et la Machine à café.
+    /// Masqué tant que la case est libre, coloré aux couleurs du propriétaire dès l'achat.
+    /// </summary>
+    public void SetupSpecialOwnerMarker(float width, float depth, Material sharedMat)
+    {
+        if (buildingAnchor == null) return;
+
+        Transform existing = buildingAnchor.Find("SpecialOwnerMarker");
+        if (existing != null)
+        {
+            if (Application.isPlaying) Destroy(existing.gameObject);
+            else DestroyImmediate(existing.gameObject);
+        }
+
+        GameObject root = new GameObject("SpecialOwnerMarker");
+        root.transform.SetParent(buildingAnchor, false);
+        root.transform.localPosition = Vector3.zero;
+
+        List<MeshRenderer> rends = new List<MeshRenderer>();
+
+        // 1. Cadre de sol coloré autour du kiosque / quai
+        float bw = width * 0.78f;
+        float bd = depth * 0.34f;
+        float t = 0.09f;
+        rends.Add(CreateMarkerPart(root.transform, "Border_Front", new Vector3(0f, 0.045f, -bd * 0.5f), new Vector3(bw, 0.07f, t), sharedMat));
+        rends.Add(CreateMarkerPart(root.transform, "Border_Back", new Vector3(0f, 0.045f, bd * 0.5f), new Vector3(bw, 0.07f, t), sharedMat));
+        rends.Add(CreateMarkerPart(root.transform, "Border_Left", new Vector3(-bw * 0.5f, 0.045f, 0f), new Vector3(t, 0.07f, bd), sharedMat));
+        rends.Add(CreateMarkerPart(root.transform, "Border_Right", new Vector3(bw * 0.5f, 0.045f, 0f), new Vector3(t, 0.07f, bd), sharedMat));
+
+        // 2. Mât + Fanion propriétaire bien visible en hauteur
+        GameObject pole = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        pole.name = "FlagPole";
+        pole.transform.SetParent(root.transform, false);
+        pole.transform.localPosition = new Vector3(bw * 0.44f, 0.42f, -bd * 0.25f);
+        pole.transform.localScale = new Vector3(0.06f, 0.42f, 0.06f);
+        DisableCollider(pole);
+        MeshRenderer poleMr = pole.GetComponent<MeshRenderer>();
+        if (sharedMat != null) poleMr.sharedMaterial = sharedMat;
+        ApplyBlockColor(poleMr, new Color(0.88f, 0.88f, 0.90f));
+
+        rends.Add(CreateMarkerPart(
+            root.transform,
+            "OwnerFlag",
+            new Vector3(bw * 0.44f - 0.20f, 0.72f, -bd * 0.25f),
+            new Vector3(0.38f, 0.22f, 0.06f),
+            sharedMat));
+
+        specialOwnerMarkerRoot = root;
+        specialOwnerRenderers = rends.ToArray();
+        specialOwnerMarkerRoot.SetActive(false);
+    }
+
+    /// <summary>
+    /// Met à jour la couleur du propriétaire sur une Gare ou une Compagnie (-1 = libre / masqué).
+    /// </summary>
+    public void SetSpecialOwnerVisual(int ownerId, Color ownerColor)
+    {
+        if (specialOwnerMarkerRoot == null) return;
+
+        bool owned = ownerId >= 0;
+        specialOwnerMarkerRoot.SetActive(owned);
+        if (!owned) return;
+
+        for (int i = 0; i < specialOwnerRenderers.Length; i++)
+        {
+            ApplyBlockColor(specialOwnerRenderers[i], ownerColor);
+        }
+    }
+
+    /// <summary>
+    /// Active ou désactive le surlignage doré lors de l'inspection d'une case au clic.
+    /// </summary>
+    public void SetHighlighted(bool highlighted)
+    {
+        isHighlighted = highlighted;
+        if (highlightFrame != null)
+        {
+            highlightFrame.SetActive(isHighlighted);
+        }
+    }
+
+    private MeshRenderer CreateMarkerPart(Transform parent, string partName, Vector3 pos, Vector3 scale, Material sharedMat)
+    {
+        GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        go.name = partName;
+        go.transform.SetParent(parent, false);
+        go.transform.localPosition = pos;
+        go.transform.localScale = scale;
+        DisableCollider(go);
+        MeshRenderer mr = go.GetComponent<MeshRenderer>();
+        if (sharedMat != null) mr.sharedMaterial = sharedMat;
+        return mr;
+    }
+
+    private void SetupHighlightIndicator(float width, float depth, float height, Material sharedMat)
+    {
+        Transform existing = transform.Find("SelectionHighlight");
+        if (existing != null)
+        {
+            if (Application.isPlaying) Destroy(existing.gameObject);
+            else DestroyImmediate(existing.gameObject);
+        }
+
+        GameObject root = new GameObject("SelectionHighlight");
+        root.transform.SetParent(transform, false);
+        float y = height + 0.04f;
+        float t = 0.09f;
+        Color gold = new Color(1.0f, 0.84f, 0.16f);
+
+        MeshRenderer[] bars = new MeshRenderer[4];
+        bars[0] = CreateMarkerPart(root.transform, "HL_Front", new Vector3(0f, y, -depth * 0.5f + t * 0.5f), new Vector3(width, 0.05f, t), sharedMat);
+        bars[1] = CreateMarkerPart(root.transform, "HL_Back", new Vector3(0f, y, depth * 0.5f - t * 0.5f), new Vector3(width, 0.05f, t), sharedMat);
+        bars[2] = CreateMarkerPart(root.transform, "HL_Left", new Vector3(-width * 0.5f + t * 0.5f, y, 0f), new Vector3(t, 0.05f, depth), sharedMat);
+        bars[3] = CreateMarkerPart(root.transform, "HL_Right", new Vector3(width * 0.5f - t * 0.5f, y, 0f), new Vector3(t, 0.05f, depth), sharedMat);
+
+        for (int i = 0; i < bars.Length; i++) ApplyBlockColor(bars[i], gold);
+        root.SetActive(false);
+        highlightFrame = root;
+    }
+
+    private static void DisableCollider(GameObject go)
+    {
+        Collider c = go.GetComponent<Collider>();
+        if (c != null) c.enabled = false;
+    }
+
+    private void ApplyBlockColor(MeshRenderer mr, Color col)
+    {
+        if (mr == null) return;
+        if (propBlock == null) propBlock = new MaterialPropertyBlock();
+        mr.GetPropertyBlock(propBlock);
+        propBlock.SetColor(BaseColorId, col);
+        propBlock.SetColor(ColorId, col);
+        mr.SetPropertyBlock(propBlock);
     }
 
     private void BuildProceduralTileMesh(float width, float depth, float height)
@@ -93,10 +238,8 @@ public class ProceduralTileView : MonoBehaviour
         trisBaseSlab.Clear();
         trisHeaderBand.Clear();
 
-        // 1. Socle principal biseauté (Submesh 0)
         AddBeveledBox(Vector3.zero, width, depth, 0f, height, 0.06f, trisBaseSlab);
 
-        // 2. Bandeau supérieur en relief (Submesh 1)
         float bandYMin = height;
         float bandYMax = height + 0.05f;
 
@@ -182,7 +325,7 @@ public class ProceduralTileView : MonoBehaviour
         buildingAnchor.localPosition = new Vector3(0f, topY, depth * 0.28f);
         buildingAnchor.localRotation = Quaternion.identity;
 
-        float pawnZ = (category == TileCategory.Property) ? -depth * 0.22f : -depth * 0.15f;
+        float pawnZ = (category == TileCategory.Property) ? -depth * 0.28f : -depth * 0.22f;
         float spacingX = width * 0.26f;
 
         for (int i = 0; i < 3; i++)
@@ -196,7 +339,7 @@ public class ProceduralTileView : MonoBehaviour
         }
 
         Transform labelTr = GetOrCreateChild("TileLabel3D");
-        labelTr.localPosition = new Vector3(0f, topY + 0.02f, -depth * 0.05f);
+        labelTr.localPosition = new Vector3(0f, topY + 0.03f, -depth * 0.04f);
         labelTr.localRotation = Quaternion.Euler(90f, 0f, 0f);
 
         labelTextMesh = labelTr.GetComponent<TextMesh>();
@@ -205,16 +348,50 @@ public class ProceduralTileView : MonoBehaviour
             labelTextMesh = labelTr.gameObject.AddComponent<TextMesh>();
         }
 
-        string formattedName = tileName.Replace(" – ", "\n").Replace(" de ", " de\n");
+        string formattedName = FormatTileName(tileName);
         labelTextMesh.text = price > 0
-            ? $"[{tileIndex}] {formattedName}\n({price}€)"
+            ? $"[{tileIndex}] {formattedName}\n{price} €"
             : $"[{tileIndex}]\n{formattedName}";
 
         labelTextMesh.fontSize = 36;
-        labelTextMesh.characterSize = 0.045f;
+        // Ajuste la taille de police pour les noms longs afin d'éviter tout débordement en Niveau 3 (24 cases)
+        int maxLineLen = GetLongestLineLength(labelTextMesh.text);
+        labelTextMesh.characterSize = maxLineLen > 14 ? 0.034f : (maxLineLen > 11 ? 0.039f : 0.043f);
         labelTextMesh.anchor = TextAnchor.MiddleCenter;
         labelTextMesh.alignment = TextAlignment.Center;
-        labelTextMesh.color = new Color(0.12f, 0.12f, 0.15f);
+        labelTextMesh.color = new Color(0.10f, 0.11f, 0.14f);
+    }
+
+    private static string FormatTileName(string raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return string.Empty;
+        string s = raw
+            .Replace(" – ", "\n")
+            .Replace(" - ", "\n")
+            .Replace(" de ", " de\n")
+            .Replace(" du ", " du\n")
+            .Replace(" à ", " à\n");
+
+        // Garde au maximum 3 lignes lisibles pour les noms très longs (ex. Incubateur de start-ups)
+        string[] words = s.Split(' ');
+        if (words.Length >= 2 && !s.Contains("\n") && s.Length > 12)
+        {
+            int mid = words.Length / 2;
+            s = string.Join(" ", words, 0, mid) + "\n" + string.Join(" ", words, mid, words.Length - mid);
+        }
+        return s;
+    }
+
+    private static int GetLongestLineLength(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return 0;
+        int max = 0;
+        string[] lines = text.Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].Length > max) max = lines[i].Length;
+        }
+        return max;
     }
 
     private Transform GetOrCreateChild(string childName)

@@ -97,6 +97,7 @@ public class PawnSplineMover : MonoBehaviour
             currentTileIndex = ((currentTileIndex + direction) % totalTiles + totalTiles) % totalTiles;
 
             Vector3 nextPos = board.GetPawnWorldPosition(currentTileIndex, studentId, false);
+            CampusAudioManager.PlayPawnHopStatic();
             yield return StartCoroutine(JumpAlongBezierCurve(transform.position, nextPos, jumpHeight, stepDuration));
 
             // Règle Campus Tycoon : Passer par La Rentrée (case 0) ou s'y arrêter en avançant rapporte 150€
