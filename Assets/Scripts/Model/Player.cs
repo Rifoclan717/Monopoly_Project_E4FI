@@ -86,13 +86,18 @@ namespace CampusTycoon
 
         // Effets des cartes 
 
-        public void GiveExemptionTicket() => HasExemptionTicket = true;
+        public void GiveExemptionTicket()
+        {
+            HasExemptionTicket = true;
+            CampusEvents.RaiseExemptionTicketChanged(Index, true);
+        }
 
-        /// <summary>Utilise du billet d'absence </summary>
+        /// <summary>Utilisation du billet d'absence </summary>
         public bool ConsumeExemptionTicket()
         {
             if (!HasExemptionTicket) return false;
             HasExemptionTicket = false;
+            CampusEvents.RaiseExemptionTicketChanged(Index, false);
             return true;
         }
 

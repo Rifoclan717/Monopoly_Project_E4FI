@@ -59,7 +59,25 @@ namespace CampusTycoon
         // Terrain vendu à la banque (playerId, tileIndex, amountReceived)
         public static event Action<int, int, int> OnPropertySold;
 
-        // ==================== MÉTHODES D'ÉMISSION (Appels depuis Logique ou Testeur) ====================
+        // Résultat de la roulette (playerId, dé 1..6, gain 0/100/200)
+        public static event Action<int, int, int> OnRouletteResolved;
+
+        // Passage par La Rentrée (playerId, bonus)
+        public static event Action<int, int> OnPassedStart;
+
+        // Pause au Foyer étudiant (playerId, bonus)
+        public static event Action<int, int> OnLoungeBonus;
+
+        // Tour passé (playerId), par exemple après la carte Panne de wifi
+        public static event Action<int> OnTurnSkipped;
+
+        // Double lancé : le joueur a le droit de rejouer (playerId)
+        public static event Action<int> OnDoubleRolled;
+
+        // Billet d'absence gagné ou utilisé (playerId, possedeUnBillet)
+        public static event Action<int, bool> OnExemptionTicketChanged;
+
+// ==================== MÉTHODES D'ÉMISSION (Appels depuis Logique ou Testeur) ====================
 
         public static void RaiseTurnStarted(int playerId, int turnNumber, int maxTurns = 15)
             => OnTurnStarted?.Invoke(playerId, turnNumber, maxTurns);
@@ -108,5 +126,23 @@ namespace CampusTycoon
 
         public static void RaisePropertySold(int playerId, int tileIndex, int amount)
             => OnPropertySold?.Invoke(playerId, tileIndex, amount);
+
+        public static void RaiseRouletteResolved(int playerId, int die, int payout)
+            => OnRouletteResolved?.Invoke(playerId, die, payout);
+
+        public static void RaisePassedStart(int playerId, int bonus)
+            => OnPassedStart?.Invoke(playerId, bonus);
+
+        public static void RaiseLoungeBonus(int playerId, int bonus)
+            => OnLoungeBonus?.Invoke(playerId, bonus);
+
+        public static void RaiseTurnSkipped(int playerId)
+            => OnTurnSkipped?.Invoke(playerId);
+
+        public static void RaiseDoubleRolled(int playerId)
+            => OnDoubleRolled?.Invoke(playerId);
+
+        public static void RaiseExemptionTicketChanged(int playerId, bool hasTicket)
+            => OnExemptionTicketChanged?.Invoke(playerId, hasTicket);
     }
 }
